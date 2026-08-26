@@ -5,7 +5,6 @@ import * as Phaser from "phaser";
 import { Deferred } from "@workadventure/shared-utils";
 import { TimeoutError } from "@workadventure/shared-utils/src/Abort/TimeoutError";
 import { connectionManager } from "../../Connection/ConnectionManager";
-import { startRoomSession } from "../../Connection/RoomSession";
 import { localUserStore } from "../../Connection/LocalUserStore";
 import type { Room } from "../../Connection/Room";
 import { showHelpCameraSettings } from "../../Stores/HelpSettingsStore";
@@ -209,21 +208,6 @@ export class GameManager {
                 requestedMicrophoneDeviceIdStore.set(preferredAudioInputDeviceId);
             }
             this.activeMenuSceneAndHelpCameraSettings();
-
-            // Everything the room needs to know about this player is settled on this branch — name,
-            // woka, devices — so the session can join now, while Phaser is still starting the scene.
-            // Best-effort: GameScene connects and joins on its own when there is nothing to claim.
-            startRoomSession({
-                roomUrl: this.startRoom.key,
-                playerName: this.playerName ?? "",
-                characterTextureIds: this.characterTextureIds ?? [],
-                companionTextureId: this.companionTextureId,
-                // Read here rather than in the session: GameManager already depends on MediaStore,
-                // so this costs no new import cycle — and joining as ONLINE would have announced a
-                // "busy" user as available until the scene corrected it.
-                availabilityStatus: get(availabilityStatusStore),
-            });
-
             //TODO fix to return href with # saved in localstorage
             return this.startRoom.key;
         }
