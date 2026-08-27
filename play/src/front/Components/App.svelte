@@ -24,6 +24,7 @@
     import { ReconnectingScene } from "../Phaser/Reconnecting/ReconnectingScene";
     import { ErrorScene } from "../Phaser/Reconnecting/ErrorScene";
     import { Game } from "../Phaser/Game/Game";
+    import { pumpBootWhileFramesAreMissing } from "../Phaser/Game/BackgroundBoot";
     import { waScaleManager } from "../Phaser/Services/WaScaleManager";
     import { HtmlUtils } from "../WebRtc/HtmlUtils";
     import { iframeListener } from "../Api/IframeListener";
@@ -230,6 +231,18 @@
 
         game = new Game(config);
 
+        // Everything left of the boot — switching to GameScene, reaching connect(), joining the
+        // room — is dispatched by a loop that runs on requestAnimationFrame, which a hidden
+        // renderer never gets. Clock it by hand until the world is reached, so a window that starts
+        // in the background joins its room instead of freezing on the loading screen.
+        const bootingGame = game;
+        stopBootPump = pumpBootWhileFramesAreMissing(() => bootingGame.loop.tick());
+        bootPumpUnsubscriber = gameSceneIsLoadedStore.subscribe((isLoaded) => {
+            if (isLoaded) {
+                stopBootPump?.();
+            }
+        });
+
         waScaleManager.setGame(game);
 
         canvas = HtmlUtils.querySelectorOrFail<HTMLCanvasElement>("#game canvas");
@@ -272,6 +285,8 @@
     //$: $coWebsites.length < 1 ? (flexBasis = undefined) : null;
 
     let canvasSizeUnsubscriber: Unsubscriber;
+    let bootPumpUnsubscriber: Unsubscriber | undefined;
+    let stopBootPump: (() => void) | undefined;
     onMount(() => {
         canvasSizeUnsubscriber = canvasSize.subscribe(({ width, height }) => {
             if (width < 1 || height < 1) {
@@ -284,6 +299,8 @@
 
     onDestroy(() => {
         canvasSizeUnsubscriber?.();
+        bootPumpUnsubscriber?.();
+        stopBootPump?.();
         if (canvas && handleCanvasClick) {
             canvas.removeEventListener("click", handleCanvasClick);
         }
