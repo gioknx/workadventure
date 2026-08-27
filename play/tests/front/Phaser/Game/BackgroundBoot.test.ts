@@ -23,6 +23,11 @@ class FakeWorker {
     }
 
     public fire(): void {
+        // A terminated worker delivers nothing more; the double has to model that, or a test can
+        // pass while the real clock keeps running.
+        if (this.terminated) {
+            return;
+        }
         this.onmessage?.();
     }
 
