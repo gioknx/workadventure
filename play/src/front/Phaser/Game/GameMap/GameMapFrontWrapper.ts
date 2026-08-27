@@ -25,7 +25,7 @@ import type { Entity } from "../../ECS/Entity";
 import { DEPTH_OVERLAY_INDEX } from "../DepthIndexes";
 import type { ITiledPlace } from "../GameMapPropertiesListener";
 import type { GameScene } from "../GameScene";
-import { buildDynamicAreas, randomPositionFromLayer } from "../StartPositionSource";
+import { buildDynamicAreas, randomPositionFromLayer } from "./GameMapLookups";
 import { EntitiesManager } from "./EntitiesManager";
 import { AreasManager } from "./AreasManager";
 import { getTileLayerStats, isWorthRenderingOnGpu } from "./TilemapGpuLayerEligibility";

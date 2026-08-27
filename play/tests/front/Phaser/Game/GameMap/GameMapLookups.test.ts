@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { GameMap } from "@workadventure/map-editor";
 import type { ITiledMapObject } from "@workadventure/tiled-map-type-guard";
 
-import { buildDynamicAreas, randomPositionFromLayer } from "../../../../src/front/Phaser/Game/StartPositionSource";
+import {
+    buildDynamicAreas,
+    randomPositionFromLayer,
+} from "../../../../../src/front/Phaser/Game/GameMap/GameMapLookups";
 
 function gameMapWith(tiledObjects: Partial<ITiledMapObject>[]): GameMap {
     return { tiledObjects } as unknown as GameMap;
