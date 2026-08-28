@@ -2,6 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { pumpBootWhileFramesAreMissing } from "../../../../src/front/Phaser/Game/BackgroundBoot";
 
+/** Phaser's TimeStep, reduced to what the pump touches. */
+function fakeLoop() {
+    return {
+        tick: vi.fn<() => void>(),
+        sleep: vi.fn<() => void>(),
+        wake: vi.fn<(seamless?: boolean) => void>(),
+    };
+}
+
 const FRAMES_MISSING_AFTER_MS = 100;
 const GIVE_UP_AFTER_MS = 60_000;
 
@@ -74,94 +83,102 @@ afterEach(() => {
 
 describe("pumpBootWhileFramesAreMissing", () => {
     it("clocks the loop once frames have gone missing", () => {
-        const tick = vi.fn();
-        const stop = pumpBootWhileFramesAreMissing(tick);
+        const loop = fakeLoop();
+        const stop = pumpBootWhileFramesAreMissing(loop);
 
         // Still within the tolerance: the renderer is merely between frames.
         beat(FRAMES_MISSING_AFTER_MS / 16 - 1);
-        expect(tick).not.toHaveBeenCalled();
+        expect(loop.tick).not.toHaveBeenCalled();
 
         beat(2);
-        expect(tick).toHaveBeenCalled();
+        expect(loop.tick).toHaveBeenCalled();
 
         stop();
     });
 
     it("stays out of the way while frames keep arriving", () => {
-        const tick = vi.fn();
-        const stop = pumpBootWhileFramesAreMissing(tick);
+        const loop = fakeLoop();
+        const stop = pumpBootWhileFramesAreMissing(loop);
 
         for (let i = 0; i < 40; i++) {
             deliverFrame();
             beat();
         }
 
-        expect(tick).not.toHaveBeenCalled();
+        expect(loop.tick).not.toHaveBeenCalled();
         stop();
     });
 
     it("takes over when frames stop, and steps aside when they come back", () => {
-        const tick = vi.fn();
-        const stop = pumpBootWhileFramesAreMissing(tick);
+        const loop = fakeLoop();
+        const stop = pumpBootWhileFramesAreMissing(loop);
 
         // Hidden: nothing paints any more.
         beat(20);
-        const whileHidden = tick.mock.calls.length;
+        const whileHidden = loop.tick.mock.calls.length;
         expect(whileHidden).toBeGreaterThan(0);
+
+        // Phaser's clock is handed over once, not at every beat.
+        expect(loop.sleep).toHaveBeenCalledTimes(1);
+        expect(loop.wake).not.toHaveBeenCalled();
 
         // Back on screen: every beat finds a fresh frame.
         for (let i = 0; i < 20; i++) {
             deliverFrame();
             beat();
         }
-        expect(tick).toHaveBeenCalledTimes(whileHidden);
+        expect(loop.tick).toHaveBeenCalledTimes(whileHidden);
+        expect(loop.wake).toHaveBeenCalledTimes(1);
 
         stop();
     });
 
     it("stops for good once the world is reached, and lets the clock go", () => {
-        const tick = vi.fn();
-        const stop = pumpBootWhileFramesAreMissing(tick);
+        const loop = fakeLoop();
+        const stop = pumpBootWhileFramesAreMissing(loop);
 
         beat(20);
-        const pumped = tick.mock.calls.length;
+        const pumped = loop.tick.mock.calls.length;
         expect(pumped).toBeGreaterThan(0);
 
         stop();
         expect(clocks[0].terminated).toBe(true);
+        // Handed back even though no frame ever came: a window revealed later must still redraw.
+        expect(loop.wake).toHaveBeenCalledTimes(1);
 
         beat(20);
-        expect(tick).toHaveBeenCalledTimes(pumped);
+        expect(loop.tick).toHaveBeenCalledTimes(pumped);
     });
 
     it("gives up on a boot that never gets there, so a waiting screen is not pumped forever", () => {
-        const tick = vi.fn();
-        pumpBootWhileFramesAreMissing(tick);
+        const loop = fakeLoop();
+        pumpBootWhileFramesAreMissing(loop);
 
         beat(20);
-        const pumped = tick.mock.calls.length;
+        const pumped = loop.tick.mock.calls.length;
         expect(pumped).toBeGreaterThan(0);
 
         vi.advanceTimersByTime(GIVE_UP_AFTER_MS);
         expect(clocks[0].terminated).toBe(true);
+        expect(loop.wake).toHaveBeenCalledTimes(1);
 
         beat(20);
-        expect(tick).toHaveBeenCalledTimes(pumped);
+        expect(loop.tick).toHaveBeenCalledTimes(pumped);
     });
 
     it("survives being stopped twice", () => {
-        const stop = pumpBootWhileFramesAreMissing(vi.fn());
+        const stop = pumpBootWhileFramesAreMissing(fakeLoop());
         stop();
         expect(() => stop()).not.toThrow();
     });
 
     it("degrades to the old behaviour rather than breaking the boot when workers are unavailable", () => {
         workerThrows = true;
-        const tick = vi.fn();
+        const loop = fakeLoop();
 
-        const stop = pumpBootWhileFramesAreMissing(tick);
+        const stop = pumpBootWhileFramesAreMissing(loop);
 
         expect(() => stop()).not.toThrow();
-        expect(tick).not.toHaveBeenCalled();
+        expect(loop.tick).not.toHaveBeenCalled();
     });
 });

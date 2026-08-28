@@ -233,10 +233,9 @@
 
         // Everything left of the boot — switching to GameScene, reaching connect(), joining the
         // room — is dispatched by a loop that runs on requestAnimationFrame, which a hidden
-        // renderer never gets. Clock it by hand until the world is reached, so a window that starts
-        // in the background joins its room instead of freezing on the loading screen.
-        const bootingGame = game;
-        stopBootPump = pumpBootWhileFramesAreMissing(() => bootingGame.loop.tick());
+        // renderer never gets. Take that loop over until the world is reached, so a window that
+        // starts in the background joins its room instead of freezing on the loading screen.
+        stopBootPump = pumpBootWhileFramesAreMissing(game.loop);
         bootPumpUnsubscriber = gameSceneIsLoadedStore.subscribe((isLoaded) => {
             if (isLoaded) {
                 stopBootPump?.();
