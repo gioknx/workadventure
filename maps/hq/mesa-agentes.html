@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mesa dos agentes</title>
+<style>
+  :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+  body { padding: 8px; color: #fff7d6; text-shadow: 0 1px 1px #21180e; }
+  .painel { height: 100%; border: 3px solid #58381d; border-radius: 14px; background: #8e5d2f; box-shadow: 0 6px 0 #3b2818, inset 0 0 0 2px #c49355; padding: 8px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 28px; border-bottom: 2px solid #65401f; }
+  h1 { margin: 0; font-size: 12px; letter-spacing: .08em; }
+  #placar { font-size: 10px; font-weight: 800; color: #ffe29a; white-space: nowrap; }
+  #cadeiras { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding-top: 7px; }
+  .cadeira { min-width: 0; height: 49px; border: 2px solid #4f351f; border-radius: 8px; background: #3e2b1e; padding: 4px 6px; box-shadow: inset 0 -3px 0 #291c14; }
+  .cadeira.vazia { opacity: .48; border-style: dashed; display: grid; place-items: center; color: #d0b58b; font-size: 10px; }
+  .linha { display: flex; align-items: center; gap: 5px; min-width: 0; }
+  .luz { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: #57e389; box-shadow: 0 0 6px #57e389; }
+  .bloqueado .luz { background: #ffbf4b; box-shadow: 0 0 6px #ffbf4b; }
+  .nome { font-size: 9px; font-weight: 900; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .projeto { margin-left: auto; color: #e7c58f; font-size: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .tarefa { margin-top: 3px; color: #fff7d6; font-size: 9px; line-height: 1.12; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  #estado { height: calc(100% - 28px); display: grid; place-items: center; text-align: center; color: #ffe29a; font-size: 11px; }
+  #fila { margin-top: 5px; padding: 4px 6px; border-radius: 6px; background: #6f281e; color: #ffd1c9; font-size: 9px; font-weight: 800; text-align: center; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main class="painel" aria-live="polite">
+  <header><h1>MESA DOS AGENTES</h1><span id="placar">conectando</span></header>
+  <div id="estado">Lendo o HQ ao vivo...</div>
+  <section id="cadeiras" hidden></section>
+  <div id="fila" hidden></div>
+</main>
+<script>
+(function () {
+  const API = "http://127.0.0.1:8898/agentes";
+  const cadeiras = document.getElementById("cadeiras");
+  const estado = document.getElementById("estado");
+  const placar = document.getElementById("placar");
+  const fila = document.getElementById("fila");
+
+  function escapar(valor) {
+    return String(valor ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+
+  function renderizar(dados) {
+    const capacidade = Number(dados.capacidade) || 8;
+    const ocupados = Array.isArray(dados.ocupados) ? dados.ocupados : [];
+    const emFila = Array.isArray(dados.fila) ? dados.fila : [];
+    const blocos = ocupados.map((agent) => `
+      <article class="cadeira ${agent.estado === "blocked" ? "bloqueado" : ""}" title="${escapar(agent.tarefa)}">
+        <div class="linha"><span class="luz"></span><span class="nome">${escapar(agent.nome)}</span><span class="projeto">${escapar(agent.projeto)}</span></div>
+        <div class="tarefa">${escapar(agent.tarefa)}</div>
+      </article>`);
+
+    while (blocos.length < capacidade) blocos.push('<article class="cadeira vazia">cadeira livre</article>');
+    cadeiras.innerHTML = blocos.join("");
+    placar.textContent = `${ocupados.length}/${capacidade}`;
+    fila.hidden = ocupados.length < capacidade;
+    fila.textContent = emFila.length ? `MESA CHEIA · ${emFila.length} NA FILA` : "MESA CHEIA";
+    estado.hidden = true;
+    cadeiras.hidden = false;
+  }
+
+  function indisponivel() {
+    cadeiras.hidden = true;
+    fila.hidden = true;
+    estado.hidden = false;
+    estado.textContent = "Mesa sem sinal do Herdr";
+    placar.textContent = "offline";
+  }
+
+  async function atualizar() {
+    try {
+      const resposta = await fetch(API, { cache: "no-store" });
+      if (!resposta.ok) throw new Error(String(resposta.status));
+      renderizar(await resposta.json());
+    } catch (_) {
+      indisponivel();
+    }
+  }
+
+  window.mesaAgentes = { atualizar, renderizar, indisponivel };
+  atualizar();
+  setInterval(atualizar, 2000);
+})();
+</script>
+</body>
+</html>
