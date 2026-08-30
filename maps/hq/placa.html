@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>Placa</title>
+<script src="http://play.workadventure.test/iframe_api.js"></script>
+<style>body{font-family:sans-serif;background:#151a23;color:#f3f5f8;padding:14px;margin:0}
+input{width:100%;padding:8px;border-radius:8px;border:1px solid #444;background:#0f1218;color:#fff}
+button{margin-top:10px;padding:8px 14px;border-radius:8px;border:0;background:#3ddc97;font-weight:700;cursor:pointer}
+p{margin:0 0 8px;font-size:13px;color:#949caf}</style></head><body>
+<p>No que voce esta trabalhando?</p>
+<input id="t" maxlength="80" placeholder="escreva a placa...">
+<button id="b">Gravar na placa</button>
+<script>
+WA.onInit().then(function(){
+  document.getElementById("t").value = WA.state.hq_placa_mesa || "";
+  document.getElementById("b").onclick = function(){
+    WA.state.saveVariable("hq_placa_mesa", document.getElementById("t").value);
+    document.getElementById("b").textContent = "Gravado!";
+  };
+});
+</script></body></html>
