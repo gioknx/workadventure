@@ -8,22 +8,22 @@
   :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
   * { box-sizing: border-box; }
   html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
-  body { padding: 8px; color: #fff7d6; text-shadow: 0 1px 1px #21180e; }
-  .painel { height: 100%; border: 3px solid #58381d; border-radius: 14px; background: #8e5d2f; box-shadow: 0 6px 0 #3b2818, inset 0 0 0 2px #c49355; padding: 8px; }
-  header { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 28px; border-bottom: 2px solid #65401f; }
-  h1 { margin: 0; font-size: 12px; letter-spacing: .08em; }
-  #placar { font-size: 10px; font-weight: 800; color: #ffe29a; white-space: nowrap; }
-  #cadeiras { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding-top: 7px; }
-  .cadeira { min-width: 0; height: 49px; border: 2px solid #4f351f; border-radius: 8px; background: #3e2b1e; padding: 4px 6px; box-shadow: inset 0 -3px 0 #291c14; }
-  .cadeira.vazia { opacity: .48; border-style: dashed; display: grid; place-items: center; color: #d0b58b; font-size: 10px; }
+  body { padding: 4px; color: #fff7d6; text-shadow: 0 1px 1px #21180e; }
+  .painel { height: 100%; background: transparent; padding: 3px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 5px; height: 24px; padding: 0 5px; border: 2px solid #58381d; border-radius: 6px; background: rgba(62, 43, 30, .94); }
+  h1 { margin: 0; font-size: 10px; letter-spacing: .05em; }
+  #placar { font-size: 9px; font-weight: 800; color: #ffe29a; white-space: nowrap; }
+  #cadeiras { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding-top: 3px; }
+  .cadeira { min-width: 0; height: 40px; border: 1px solid #4f351f; border-radius: 5px; background: rgba(62, 43, 30, .92); padding: 3px 4px; box-shadow: inset 0 -2px 0 #291c14; }
+  .cadeira.vazia { opacity: .48; border-style: dashed; display: grid; place-items: center; color: #d0b58b; font-size: 8px; }
   .linha { display: flex; align-items: center; gap: 5px; min-width: 0; }
   .luz { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: #57e389; box-shadow: 0 0 6px #57e389; }
   .bloqueado .luz { background: #ffbf4b; box-shadow: 0 0 6px #ffbf4b; }
-  .nome { font-size: 9px; font-weight: 900; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-  .projeto { margin-left: auto; color: #e7c58f; font-size: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-  .tarefa { margin-top: 3px; color: #fff7d6; font-size: 9px; line-height: 1.12; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  #estado { height: calc(100% - 28px); display: grid; place-items: center; text-align: center; color: #ffe29a; font-size: 11px; }
-  #fila { margin-top: 5px; padding: 4px 6px; border-radius: 6px; background: #6f281e; color: #ffd1c9; font-size: 9px; font-weight: 800; text-align: center; }
+  .nome { font-size: 8px; font-weight: 900; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .projeto { margin-left: auto; color: #e7c58f; font-size: 7px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .tarefa { margin-top: 2px; color: #fff7d6; font-size: 8px; line-height: 1.05; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  #estado { height: calc(100% - 24px); display: grid; place-items: center; text-align: center; color: #ffe29a; font-size: 10px; }
+  #fila { margin-top: 2px; padding: 2px 4px; border-radius: 5px; background: rgba(111, 40, 30, .94); color: #ffd1c9; font-size: 8px; font-weight: 800; text-align: center; }
   [hidden] { display: none !important; }
 </style>
 </head>

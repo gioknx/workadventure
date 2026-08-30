@@ -10,8 +10,8 @@ WA.onInit().then(async function () {
 
   WA.room.website.create({
     name: "mesa-agentes",
-    url: "http://maps.workadventure.test/hq/mesa-agentes.html?v=2",
-    position: { x: 1024, y: 96, width: 256, height: 288 },
+    url: "http://maps.workadventure.test/hq/mesa-agentes.html?v=3",
+    position: { x: 1056, y: 128, width: 192, height: 224 },
     visible: true,
     allowApi: false,
     allow: "",
