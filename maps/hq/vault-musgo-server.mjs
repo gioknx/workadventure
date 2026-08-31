@@ -11,7 +11,7 @@ import { homedir } from "node:os";
 const HOST = "127.0.0.1";
 const PORT = 8900;
 const VAULT = join(homedir(), "Documents", "Obsidian", "Vault");
-const DIAS_MUSGO = 90;
+const DIAS_MUSGO = 21;
 const ESTANTES = 3;
 const IGNORAR = new Set([".git", ".obsidian", "node_modules", "_ARQUIVO", "assets", ".trash"]);
 
@@ -31,7 +31,7 @@ async function varrer(dir, saida, profundidade = 0) {
     } else if (entrada.name.endsWith(".md")) {
       try {
         const s = await stat(caminho);
-        const usado = Math.max(s.atimeMs, s.mtimeMs);
+        const usado = s.mtimeMs;
         saida.push({ caminho, usado });
       } catch {
         /* arquivo sumiu no meio da varredura */
