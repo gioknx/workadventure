@@ -34,10 +34,12 @@ WA.onInit().then(function () {
     var ganhou = Math.random() < 0.5;
     if (!ganhou) {
       banner("Perdeu a partida. Sem confete dessa vez.");
+      console.info("[G2] confete: partida perdida");
       return;
     }
     WA.player.state.saveVariable("hq_confete_ate", Date.now() + DURACAO);
     banner("Ganhou! Confete grudado por 20 minutos - olhe o chao por onde voce passar.");
+    console.info("[G2] confete: partida ganha, rastro ativo por 20 min");
   });
 
   WA.player.onPlayerMove(function (posicao) {

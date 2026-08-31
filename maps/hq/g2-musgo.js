@@ -59,6 +59,7 @@ WA.onInit().then(function () {
         pintar(estante, false);
       }
       banner('"' + nota.titulo + '" (' + nota.pasta + ") - " + nota.dias + " dias sem abrir. Musgo limpo.");
+      console.info("[G2] musgo limpo: " + nota.titulo + " (" + nota.dias + " dias)");
     });
   });
 }).catch(function (e) { console.error("[G2] musgo erro", e); });

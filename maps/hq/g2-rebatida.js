@@ -73,6 +73,7 @@ WA.onInit().then(function () {
     gravar(estado);
     apagar(antigo);
     desenhar();
+    console.info("[G2] rebatida: bola " + antigo + " -> " + estado.x);
   }
 
   abrirDia();
