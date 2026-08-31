@@ -19,6 +19,7 @@ export default defineConfig(({ mode }) => {
         server: {
             host: "0.0.0.0",
             port: 8080,
+            allowedHosts: [".workadventure.test", ".workadventure.localhost"],
             ws: {
                 // workaround for development in docker
                 clientPort: 80,
@@ -26,7 +27,7 @@ export default defineConfig(({ mode }) => {
                 // `play-vite` Traefik router in docker-compose.yaml), so pin the HMR websocket to
                 // the Vite host explicitly. Otherwise the client opens the HMR socket against the
                 // play host, which routes to the pusher instead of Vite and HMR fails to connect.
-                host: "front.workadventure.localhost",
+                host: "front.workadventure.test",
             },
             watch: {
                 ignored: ["./src/pusher"],

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>HQ quest — arnes de teste</title>
+<script src="http://play.workadventure.test/iframe_api.js"></script>
+<script src="http://maps.workadventure.test/hq/quest.js"></script>
+<script>
+// Arnes de teste (E2.2): caminha o avatar ate cada zona para provar o gatilho onEnter.
+// NAO faz parte da peca final; o mapa aponta para quest.html.
+WA.onInit().then(function () {
+  var alvos = [
+    { nome: "Laboratorio", x: 6 * 32 + 16, y: 17 * 32 + 16 },
+    { nome: "Cafe",        x: 14 * 32 + 16, y: 17 * 32 + 16 },
+    { nome: "Palco",       x: 21 * 32 + 16, y: 17 * 32 + 16 },
+  ];
+  var i = 0;
+  function proximo() {
+    if (i >= alvos.length) { console.info("[TESTE] percurso terminado"); return; }
+    var a = alvos[i++];
+    console.info("[TESTE] indo para " + a.nome);
+    WA.player.moveTo(a.x, a.y, 12).then(function (r) {
+      console.info("[TESTE] chegou em " + a.nome + " cancelado=" + r.cancelled);
+      setTimeout(proximo, 1500);
+    }).catch(function (e) { console.error("[TESTE] falhou", e); });
+  }
+  setTimeout(proximo, 4000);
+});
+</script>
+</head>
+<body></body>
+</html>

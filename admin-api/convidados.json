@@ -1,0 +1,28 @@
+{
+  "aberto": true,
+  "pessoas": [
+    {
+      "email": "gio@mind.local",
+      "papeis": [
+        "dono",
+        "admin"
+      ],
+      "banido": false
+    },
+    {
+      "email": "convidado@teste.local",
+      "papeis": [
+        "visitante"
+      ],
+      "banido": false
+    },
+    {
+      "email": "indesejado@teste.local",
+      "papeis": [
+        "visitante"
+      ],
+      "banido": true,
+      "motivo": "exemplo — apague esta linha quando quiser"
+    }
+  ]
+}
