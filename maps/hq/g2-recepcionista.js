@@ -28,6 +28,13 @@ WA.onInit().then(function () {
       texto: "O gravador guarda os ultimos passos de quem esteve aqui. Entre, ande, saia e volte: seu fantasma refaz o caminho." }
   ];
 
+
+  // Corpo visivel: sem isto a recepcionista era uma zona invisivel no chao.
+  var CAMADA = "floor/g2-recepcao";
+  WA.room.setTiles([
+    { x: 9, y: 17, tile: 2972, layer: CAMADA },   // a recepcionista
+    { x: 10, y: 17, tile: 2973, layer: CAMADA }   // placa ao lado dela
+  ]);
   var popup = null;
   var andando = false;
   var timerAuto = null;
@@ -37,8 +44,13 @@ WA.onInit().then(function () {
     if (timerAuto) { clearTimeout(timerAuto); timerAuto = null; }
   }
 
+  // O modo automatico e do ARNES, nunca do jogador: usar player.state fazia a
+  // marca de teste ficar gravada e o tour disparar sozinho na visita seguinte.
   function auto() {
-    return WA.player.state.hq_tour_auto === true;
+    return typeof window !== "undefined" && window.HQ_TOUR_AUTO === true;
+  }
+  if (WA.player.state.hq_tour_auto !== undefined) {
+    WA.player.state.hq_tour_auto = undefined; // limpa marca de teste antiga
   }
 
   function abrir(ancora, texto, botoes) {
