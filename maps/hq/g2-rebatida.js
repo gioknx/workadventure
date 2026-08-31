@@ -6,8 +6,8 @@
  */
 WA.onInit().then(function () {
   var CAMADA = "floor/g2-bola";
-  var TILE_BOLA = 11;     // WA_Special_Zones, ciano
-  var TILE_ENCONTRO = 2;  // WA_Special_Zones, amarelo
+  var TILE_BOLA = 2968; // HQ_Marcadores: bola ciano
+  var TILE_ENCONTRO = 2969; // HQ_Marcadores: marcacao de piso
   var CORREDOR_Y = 17;
   var X_MIN = 11;
   var X_MAX = 26;

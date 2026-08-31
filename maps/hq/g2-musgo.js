@@ -6,7 +6,7 @@
 WA.onInit().then(function () {
   var SERVIDOR = "http://localhost:8900/musgo";
   var CAMADA = "floor/g2-musgo";
-  var TILE_MUSGO = 6; // WA_Special_Zones, verde
+  var TILE_MUSGO = 2290; // WA_Exterior: musgo verde (conferido por imagem)
   var ESTANTES = [
     { zona: "estante-1", x: 22, y: 17 },
     { zona: "estante-2", x: 24, y: 17 },

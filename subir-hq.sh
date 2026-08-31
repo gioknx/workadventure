@@ -28,6 +28,16 @@ else
     && echo "    subiu" || { echo "    FALHOU: /tmp/admin-api.log"; exit 1; }
 fi
 
+echo "==> memoria do Vault (musgo)"
+if curl -s -m 3 -o /dev/null http://localhost:8900/saude; then
+  echo "    ja estava de pe"
+else
+  nohup node maps/hq/vault-musgo-server.mjs > /tmp/musgo.log 2>&1 &
+  sleep 2
+  curl -s -m 5 -o /dev/null http://localhost:8900/saude \
+    && echo "    subiu" || { echo "    FALHOU: /tmp/musgo.log"; exit 1; }
+fi
+
 echo "==> proxy do NPC"
 if curl -s -m 3 -o /dev/null -X POST http://localhost:8899 \
      -H 'Content-Type: application/json' -d '{"pergunta":"ping"}'; then

@@ -5,7 +5,7 @@
  */
 WA.onInit().then(function () {
   var CAMADA = "floor/g2-confete";
-  var TILE_CONFETE = 9; // WA_Special_Zones, roxo
+  var TILE_CONFETE = 2971; // HQ_Marcadores: confete colorido
   var DURACAO = 20 * 60 * 1000;
   var RASTRO_MAX = 40;
   var rastro = [];

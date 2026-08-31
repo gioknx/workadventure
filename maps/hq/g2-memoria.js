@@ -4,9 +4,9 @@
  */
 WA.onInit().then(function () {
   var CAMADA = "floor/g2-memoria";
-  var TILE_SINUCA = 8;
-  var TILE_PEDESTAL = 10;
-  var TILE_FANTASMA = 12;
+  var TILE_SINUCA = 2968; // HQ_Marcadores: bola ciano
+  var TILE_PEDESTAL = 2513; // WA_Exterior: coluna de pedra
+  var TILE_FANTASMA = 2970; // HQ_Marcadores: rastro
   var PEDESTAL_X = 26;
   var MESA = [22, 23, 24];
   var fantasmaAtivo = null;
