@@ -4,12 +4,13 @@
  * o chao vai ficando pintado por onde o avatar passa, no mapa todo.
  */
 WA.onInit().then(function () {
-  var CAMADA = "floor/floor2";
+  var CAMADA = "floor/g2-confete";
   var TILE_CONFETE = 9; // WA_Special_Zones, roxo
   var DURACAO = 20 * 60 * 1000;
   var RASTRO_MAX = 40;
   var rastro = [];
   var ultimoTile = null;
+  var alarme = null;
 
   function ate() { return Number(WA.player.state.hq_confete_ate) || 0; }
   function ativo() { return ate() > Date.now(); }
@@ -25,6 +26,18 @@ WA.onInit().then(function () {
     }));
     rastro = [];
   }
+
+  function agendarLimpeza() {
+    clearTimeout(alarme);
+    var falta = ate() - Date.now();
+    if (falta <= 0) return;
+    alarme = setTimeout(function () {
+      limparRastro();
+      console.info("[G2] confete: prazo vencido, rastro apagado");
+    }, falta);
+  }
+
+  agendarLimpeza();
 
   WA.room.area.onEnter("lazer-jogo").subscribe(function () {
     if (ativo()) {

@@ -5,7 +5,7 @@
  * marcado no chao para todo mundo.
  */
 WA.onInit().then(function () {
-  var CAMADA = "floor/floor2";
+  var CAMADA = "floor/g2-bola";
   var TILE_BOLA = 11;     // WA_Special_Zones, ciano
   var TILE_ENCONTRO = 2;  // WA_Special_Zones, amarelo
   var CORREDOR_Y = 17;

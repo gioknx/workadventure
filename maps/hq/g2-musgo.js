@@ -1,11 +1,11 @@
 /**
  * G2.1 - Musgo do que ninguem le.
- * Nota do Vault sem abrir ha 90 dias cobre de musgo a estante correspondente.
+ * Nota do Vault parada ha muito tempo cobre de musgo a estante correspondente.
  * Passar por cima limpa o musgo e mostra a nota esquecida.
  */
 WA.onInit().then(function () {
   var SERVIDOR = "http://localhost:8900/musgo";
-  var CAMADA = "floor/floor2";
+  var CAMADA = "floor/g2-musgo";
   var TILE_MUSGO = 6; // WA_Special_Zones, verde
   var ESTANTES = [
     { zona: "estante-1", x: 22, y: 17 },

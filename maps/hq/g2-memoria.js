@@ -3,10 +3,13 @@
  * Sinuca fantasma, objeto do dia e fita cassete da sala.
  */
 WA.onInit().then(function () {
-  var CAMADA = "floor/floor2";
+  var CAMADA = "floor/g2-memoria";
   var TILE_SINUCA = 8;
   var TILE_PEDESTAL = 10;
   var TILE_FANTASMA = 12;
+  var PEDESTAL_X = 26;
+  var MESA = [22, 23, 24];
+  var fantasmaAtivo = null;
   var gravando = false;
   var ultimaFita = ler("hq_fita", null);
   var caminho = [];
@@ -29,18 +32,20 @@ WA.onInit().then(function () {
   // 4. Mesa de sinuca fantasma — a posicao e o ultimo taco sobrevivem a sala vazia.
   var sinuca = ler("hq_sinuca", { bolas: [22, 23, 24], taco: "ninguem", tacadas: 0 });
   function desenharSinuca() {
-    [22, 23, 24, 25].forEach(function (x) { tile(x, 19, null); });
-    (sinuca.bolas || []).forEach(function (x) { tile(x, 19, TILE_SINUCA); });
+    MESA.forEach(function (x) { tile(x, 19, null); });
+    (sinuca.bolas || MESA).forEach(function (x) { tile(x, 19, TILE_SINUCA); });
   }
   desenharSinuca();
   WA.room.area.onEnter("sinuca-fantasma").subscribe(function () {
-    sinuca = ler("hq_sinuca", sinuca);
-    mostrar("sinuca", "Taco parado onde " + sinuca.taco + " deixou. Tacadas guardadas: " + sinuca.tacadas + ". Voce deu a proxima.");
-    sinuca.bolas = (sinuca.bolas || [22, 23, 24]).map(function (x, i) {
-      return 22 + ((x - 21 + i) % 4);
-    });
-    sinuca.taco = WA.player.name;
-    sinuca.tacadas = (sinuca.tacadas || 0) + 1;
+    var atual = ler("hq_sinuca", sinuca);
+    mostrar("sinuca", "Taco parado onde " + atual.taco + " deixou. Tacadas guardadas: " + atual.tacadas + ". Voce deu a proxima.");
+    var giro = (atual.bolas || MESA).slice();
+    giro.unshift(giro.pop());
+    sinuca = {
+      bolas: giro,
+      taco: WA.player.name,
+      tacadas: Math.max(Number(atual.tacadas) || 0, Number(sinuca.tacadas) || 0) + 1
+    };
     WA.state.saveVariable("hq_sinuca", JSON.stringify(sinuca));
     desenharSinuca();
     console.info("[G2] sinuca: tacada " + sinuca.tacadas + " de " + WA.player.name);
@@ -74,6 +79,8 @@ WA.onInit().then(function () {
   function pararReproducao() {
     clearInterval(reproducao);
     reproducao = null;
+    if (fantasmaAtivo) tile(fantasmaAtivo.x, fantasmaAtivo.y, null);
+    fantasmaAtivo = null;
   }
   function reproduzir(fita) {
     pararReproducao();
@@ -82,17 +89,17 @@ WA.onInit().then(function () {
       return;
     }
     var i = 0;
-    var anterior = null;
     mostrar("cassete", "PLAY — fantasma de " + fita.quem + ", " + fita.caminho.length + " passos guardados.");
     reproducao = setInterval(function () {
-      if (anterior) tile(anterior.x, anterior.y, null);
+      if (fantasmaAtivo) tile(fantasmaAtivo.x, fantasmaAtivo.y, null);
+      fantasmaAtivo = null;
       if (i >= fita.caminho.length) {
         pararReproducao();
         console.info("[G2] cassete: replay terminou (" + fita.caminho.length + " passos de " + fita.quem + ")");
         return;
       }
-      anterior = fita.caminho[i++];
-      tile(anterior.x, anterior.y, TILE_FANTASMA);
+      fantasmaAtivo = fita.caminho[i++];
+      tile(fantasmaAtivo.x, fantasmaAtivo.y, TILE_FANTASMA);
     }, 350);
   }
   WA.room.area.onEnter("fita-cassete").subscribe(function () {

@@ -59,6 +59,15 @@ async function estantes() {
 
   return { atualizadoEm: agora, totalNotas: notas.length, limiteDias: DIAS_MUSGO, estantes: esquecidas };
 }
+const CACHE_MS = 60 * 1000;
+let cache = null;
+
+async function estantesComCache() {
+  if (cache && Date.now() - cache.em < CACHE_MS) return cache.corpo;
+  const corpo = await estantes();
+  cache = { em: Date.now(), corpo };
+  return corpo;
+}
 
 const server = createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -74,7 +83,7 @@ const server = createServer(async (req, res) => {
   if (url.pathname !== "/musgo") return res.writeHead(404).end();
 
   try {
-    const corpo = await estantes();
+    const corpo = await estantesComCache();
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify(corpo));
   } catch (erro) {
@@ -85,4 +94,9 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`[musgo] http://${HOST}:${PORT}/musgo`);
+});
+
+server.on("error", (erro) => {
+  console.error(`[musgo] nao subiu em ${HOST}:${PORT} — ${erro.code || erro.message}`);
+  process.exitCode = 1;
 });
