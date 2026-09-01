@@ -1,0 +1,18 @@
+{
+  "zeca": {
+    "nome": "Squad Zeca",
+    "cor": "#e11d48"
+  },
+  "th": {
+    "nome": "Squad TH",
+    "cor": "#2563eb"
+  },
+  "fernando": {
+    "nome": "Squad Fernando",
+    "cor": "#16a34a"
+  },
+  "xyz": {
+    "nome": "Squad XYZ (aberto)",
+    "cor": "#9333ea"
+  }
+}

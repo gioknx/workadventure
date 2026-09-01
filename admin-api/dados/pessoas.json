@@ -1,0 +1,20 @@
+{
+  "Zeca": {
+    "uuid": "39fdce07-6f63-4e2d-9211-0ebba6830f38",
+    "squad": "zeca",
+    "tags": [],
+    "_pendente_confirmar": true
+  },
+  "TH": {
+    "uuid": "39f89c90-ffce-4562-b646-f70d9ed8675d",
+    "squad": "th",
+    "tags": [],
+    "_pendente_confirmar": true
+  },
+  "Fernando": {
+    "uuid": "c4a2ed82-ce64-4829-9e93-b5224886668f",
+    "squad": "fernando",
+    "tags": [],
+    "_pendente_confirmar": true
+  }
+}

@@ -14,7 +14,18 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
-const PORTA = 8901;
+const PORTA = Number(process.env.ADMIN_API_PORT ?? 8901);
+const DADOS = join(AQUI, "dados");
+
+function lerDadosJson(nome) {
+  const caminho = join(DADOS, nome);
+  try {
+    return JSON.parse(readFileSync(caminho, "utf8"));
+  } catch (erro) {
+    console.error(`${nome} ilegivel:`, erro.message);
+    throw new Error(`arquivo de dados ilegivel: ${nome}`);
+  }
+}
 
 function convidados() {
   // relido a cada chamada: editar o arquivo vale na hora, sem reiniciar
@@ -39,6 +50,42 @@ const server = createServer((req, res) => {
     res.end(JSON.stringify(corpo));
     console.log(`${codigo} ${url.pathname}${url.search}`);
   };
+
+  if (req.method === "GET" && url.pathname.startsWith("/pessoas/")) {
+    try {
+      const nome = decodeURIComponent(url.pathname.slice("/pessoas/".length));
+      const pessoa = lerDadosJson("pessoas.json")[nome];
+      if (!pessoa) return responder(404, { erro: "pessoa nao encontrada" });
+      return responder(200, {
+        uuid: pessoa.uuid,
+        squad: pessoa.squad,
+        tags: pessoa.tags ?? [],
+      });
+    } catch (erro) {
+      return responder(500, { erro: erro.message });
+    }
+  }
+
+  if (req.method === "GET" && url.pathname === "/squads") {
+    try {
+      const squads = lerDadosJson("squads.json");
+      const pessoas = Object.values(lerDadosJson("pessoas.json"));
+      return responder(
+        200,
+        Object.fromEntries(
+          Object.entries(squads).map(([id, squad]) => [
+            id,
+            {
+              ...squad,
+              membros: pessoas.filter((pessoa) => pessoa.squad === id).length,
+            },
+          ]),
+        ),
+      );
+    } catch (erro) {
+      return responder(500, { erro: erro.message });
+    }
+  }
 
   // O jogo pergunta primeiro: que versao de API voce fala?
   if (url.pathname === "/api/capabilities") {
