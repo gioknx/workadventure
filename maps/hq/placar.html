@@ -141,8 +141,9 @@
     elementos.liderPontos.textContent = `${lider ? lider.pontos : 0} pontos`;
     elementos.periodo.textContent = modo === "semana" ? `Semana ${dados.semana}` : "Acumulado geral";
     const vipSquad = dados.vip && dados.vip.squad_vencedor;
+    const vipInfo = (dados.squads || []).find((item) => item.id === vipSquad);
     elementos.vipCard.classList.toggle("tem-dono", Boolean(vipSquad));
-    elementos.vipNome.textContent = vipSquad || "Sem detentor";
+    elementos.vipNome.textContent = vipInfo ? vipInfo.nome : vipSquad || "Sem detentor";
     elementos.vipSemana.textContent = dados.vip && dados.vip.semana ? `Desde a semana ${dados.vip.semana}` : "A primeira semana ainda não fechou.";
     elementos.estado.textContent = "Atualizado agora";
     elementos.estado.className = "";

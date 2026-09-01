@@ -19,6 +19,7 @@ const PORTA = Number(process.env.ADMIN_API_PORT ?? 8901);
 const DADOS = join(AQUI, "dados");
 const CAMINHO_LEDGER = join(DADOS, "ledger.jsonl");
 const CAMINHO_ORFAS = join(DADOS, "vendas-orfas.jsonl");
+const CAMINHO_INVASOES_VIP = join(DADOS, "invasoes-vip.jsonl");
 const SEGREDO_WEBHOOK = process.env.HQ_WEBHOOK_SECRET ?? "";
 const URL_EVENTO_GLOBAL =
   process.env.HQ_PLAY_EVENT_URL ?? "http://play.workadventure.test/global/event";
@@ -215,6 +216,51 @@ function montarPlacar(saldos, semana = null) {
   };
 }
 
+function inicioSemanaISO(semana) {
+  const match = /^(\d{4})-W(\d{2})$/.exec(semana);
+  if (!match) throw new Error(`semana ISO invalida: ${semana}`);
+  const ano = Number(match[1]);
+  const numero = Number(match[2]);
+  const quatroJaneiro = new Date(Date.UTC(ano, 0, 4));
+  const segundaDaSemanaUm = new Date(quatroJaneiro);
+  segundaDaSemanaUm.setUTCDate(
+    quatroJaneiro.getUTCDate() - ((quatroJaneiro.getUTCDay() + 6) % 7) + (numero - 1) * 7,
+  );
+  return segundaDaSemanaUm.getTime();
+}
+
+function fecharSemana(semana, forcar = false) {
+  const vipAtual = lerDadosJson("vip.json");
+  if (
+    !forcar &&
+    vipAtual.semana &&
+    inicioSemanaISO(vipAtual.semana) >= inicioSemanaISO(semana)
+  ) {
+    return vipAtual;
+  }
+  const squads = lerDadosJson("squads.json");
+  const saldos = estadoPontos.semanas[semana]?.saldos ?? {};
+  const resultados = Object.keys(squads).map((id) => ({
+    id,
+    pontos: saldos[`squad:${id}`] ?? 0,
+  }));
+  const maior = Math.max(...resultados.map((item) => item.pontos));
+  const lideres = maior > 0 ? resultados.filter((item) => item.pontos === maior) : [];
+  const vencedor =
+    lideres.length === 1 ? lideres[0].id : vipAtual.squad_vencedor;
+  const mudou = vencedor && vencedor !== vipAtual.squad_vencedor;
+  const proximo = {
+    semana,
+    squad_vencedor: vencedor ?? null,
+    desde: mudou ? new Date().toISOString() : vipAtual.desde,
+  };
+  gravarDadosJson("vip.json", proximo);
+  console.log(
+    `[vip] semana ${semana} fechada · vencedor ${proximo.squad_vencedor ?? "mantido vazio"}`,
+  );
+  return proximo;
+}
+
 reconstruirEstadoPontos();
 
 const server = createServer(async (req, res) => {
@@ -231,7 +277,50 @@ const server = createServer(async (req, res) => {
     console.log(`${codigo} ${url.pathname}${url.search}`);
   };
 
+  try {
+    fecharSemana(semanaISO(Date.now() - 7 * 86_400_000));
+  } catch (erro) {
+    console.error("[vip] fechamento_lazy_falhou:", erro.message);
+  }
+
   if (req.method === "OPTIONS") return responder(204, {});
+
+  if (req.method === "GET" && url.pathname === "/vip") {
+    try {
+      const semanaTeste = url.searchParams.get("semana");
+      const vip = semanaTeste
+        ? fecharSemana(semanaTeste, true)
+        : lerDadosJson("vip.json");
+      return responder(200, vip);
+    } catch (erro) {
+      return responder(400, { erro: erro.message });
+    }
+  }
+
+  if (req.method === "POST" && url.pathname === "/vip/invasao") {
+    try {
+      const pedido = await lerCorpoJson(req);
+      const cadastro = acharPessoaDados(lerDadosJson("pessoas.json"), pedido.nome);
+      const vip = lerDadosJson("vip.json");
+      if (cadastro?.pessoa?.squad && cadastro.pessoa.squad === vip.squad_vencedor) {
+        return responder(200, { status: "autorizado" });
+      }
+      const invasao = {
+        nome: pedido.nome ?? null,
+        uuid: cadastro?.pessoa?.uuid ?? null,
+        squad: cadastro?.pessoa?.squad ?? null,
+        detentor: vip.squad_vencedor,
+        ts: new Date().toISOString(),
+      };
+      appendFileSync(CAMINHO_INVASOES_VIP, `${JSON.stringify(invasao)}\n`);
+      console.error(
+        `[vip] invasao ${invasao.nome ?? "desconhecido"} · detentor ${invasao.detentor ?? "vazio"}`,
+      );
+      return responder(202, { status: "invasao_registrada" });
+    } catch (erro) {
+      return responder(400, { erro: erro.message });
+    }
+  }
 
   if (req.method === "GET" && url.pathname === "/placar/semana") {
     try {
@@ -585,6 +674,8 @@ const server = createServer(async (req, res) => {
       "/webhook/estorno",
       "/placar/semana",
       "/placar/geral",
+      "/vip",
+      "/vip/invasao",
       "/api/room/access",
       "/api/lista",
     ],
