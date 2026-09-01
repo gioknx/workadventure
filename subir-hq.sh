@@ -22,7 +22,7 @@ echo "==> painel de admin"
 if curl -s -m 3 -o /dev/null http://localhost:8901/api/lista; then
   echo "    ja estava de pe"
 else
-  nohup node admin-api/servidor.mjs > /tmp/admin-api.log 2>&1 &
+  nohup node --env-file=.env admin-api/servidor.mjs > /tmp/admin-api.log 2>&1 &
   sleep 2
   curl -s -m 5 -o /dev/null http://localhost:8901/api/lista \
     && echo "    subiu" || { echo "    FALHOU: /tmp/admin-api.log"; exit 1; }

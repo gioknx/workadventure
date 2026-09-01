@@ -9,13 +9,17 @@
 // Porta 8901.
 
 import { createServer } from "node:http";
-import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
 const PORTA = Number(process.env.ADMIN_API_PORT ?? 8901);
 const DADOS = join(AQUI, "dados");
+const CAMINHO_LEDGER = join(DADOS, "ledger.jsonl");
+const CAMINHO_ORFAS = join(DADOS, "vendas-orfas.jsonl");
+const SEGREDO_WEBHOOK = process.env.HQ_WEBHOOK_SECRET ?? "";
 
 function lerDadosJson(nome) {
   const caminho = join(DADOS, nome);
@@ -53,13 +57,21 @@ function acharPessoaDados(pessoas, identificador) {
   }
 }
 
-async function lerCorpoJson(req) {
-  let corpo = "";
+async function lerCorpoBruto(req) {
+  const partes = [];
+  let tamanho = 0;
   for await (const parte of req) {
-    corpo += parte;
-    if (corpo.length > 1_000_000) throw new Error("corpo excede 1 MB");
+    const buffer = Buffer.from(parte);
+    tamanho += buffer.length;
+    if (tamanho > 1_000_000) throw new Error("corpo excede 1 MB");
+    partes.push(buffer);
   }
-  return corpo ? JSON.parse(corpo) : {};
+  return Buffer.concat(partes);
+}
+
+async function lerCorpoJson(req) {
+  const corpo = await lerCorpoBruto(req);
+  return corpo.length ? JSON.parse(corpo.toString("utf8")) : {};
 }
 
 function gravarDadosJson(nome, dados) {
@@ -68,6 +80,88 @@ function gravarDadosJson(nome, dados) {
   writeFileSync(temporario, `${JSON.stringify(dados, null, 2)}\n`);
   renameSync(temporario, destino);
 }
+
+function assinaturaValida(corpoBruto, assinatura) {
+  if (!SEGREDO_WEBHOOK || !assinatura) return false;
+  const valor = String(assinatura).replace(/^sha256=/i, "");
+  if (!/^[0-9a-f]{64}$/i.test(valor)) return false;
+  const esperada = createHmac("sha256", SEGREDO_WEBHOOK).update(corpoBruto).digest();
+  return timingSafeEqual(esperada, Buffer.from(valor, "hex"));
+}
+
+function semanaISO(timestamp) {
+  const data = new Date(timestamp);
+  const partes = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      day: "2-digit",
+      month: "2-digit",
+      timeZone: "America/Sao_Paulo",
+      year: "numeric",
+    })
+      .formatToParts(data)
+      .filter((parte) => parte.type !== "literal")
+      .map((parte) => [parte.type, parte.value]),
+  );
+  const diaLocal = new Date(Date.UTC(Number(partes.year), Number(partes.month) - 1, Number(partes.day)));
+  const diaSemana = diaLocal.getUTCDay() || 7;
+  diaLocal.setUTCDate(diaLocal.getUTCDate() + 4 - diaSemana);
+  const anoISO = diaLocal.getUTCFullYear();
+  const inicioAno = new Date(Date.UTC(anoISO, 0, 1));
+  const numero = Math.ceil(((diaLocal - inicioAno) / 86_400_000 + 1) / 7);
+  return `${anoISO}-W${String(numero).padStart(2, "0")}`;
+}
+
+function carregarLedger() {
+  const texto = readFileSync(CAMINHO_LEDGER, "utf8");
+  if (!texto.trim()) return [];
+  return texto
+    .split("\n")
+    .filter(Boolean)
+    .map((linha, indice) => {
+      try {
+        return JSON.parse(linha);
+      } catch (erro) {
+        throw new Error(`ledger.jsonl ilegivel na linha ${indice + 1}: ${erro.message}`);
+      }
+    });
+}
+
+const ledger = carregarLedger();
+let estadoPontos = { saldos: {}, semanas: {} };
+const eventosVenda = new Set();
+const eventosEstornados = new Set();
+
+function aplicarLancamento(lancamento) {
+  estadoPontos.saldos[lancamento.sujeito] =
+    (estadoPontos.saldos[lancamento.sujeito] ?? 0) + lancamento.delta;
+  const semana = (estadoPontos.semanas[lancamento.semana] ??= { saldos: {} });
+  semana.saldos[lancamento.sujeito] = (semana.saldos[lancamento.sujeito] ?? 0) + lancamento.delta;
+  if (lancamento.tipo === "credito" && lancamento.motivo === "venda") {
+    eventosVenda.add(lancamento.event_id);
+  }
+  if (lancamento.tipo === "estorno" && lancamento.event_id_original) {
+    eventosEstornados.add(lancamento.event_id_original);
+  }
+}
+
+function reconstruirEstadoPontos() {
+  estadoPontos = { saldos: {}, semanas: {} };
+  eventosVenda.clear();
+  eventosEstornados.clear();
+  for (const lancamento of ledger) aplicarLancamento(lancamento);
+  gravarDadosJson("estado-pontos.json", estadoPontos);
+}
+
+function registrarLancamentos(lancamentos) {
+  appendFileSync(CAMINHO_LEDGER, lancamentos.map((item) => `${JSON.stringify(item)}\n`).join(""));
+  for (const lancamento of lancamentos) {
+    ledger.push(lancamento);
+    aplicarLancamento(lancamento);
+  }
+  gravarDadosJson("estado-pontos.json", estadoPontos);
+}
+
+reconstruirEstadoPontos();
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORTA}`);
@@ -84,6 +178,152 @@ const server = createServer(async (req, res) => {
   };
 
   if (req.method === "OPTIONS") return responder(204, {});
+
+  if (req.method === "POST" && url.pathname === "/webhook/venda") {
+    let corpoBruto;
+    try {
+      corpoBruto = await lerCorpoBruto(req);
+    } catch (erro) {
+      console.error("[webhook/venda] corpo_invalido:", erro.message);
+      return responder(400, { erro: erro.message });
+    }
+    if (!assinaturaValida(corpoBruto, req.headers["x-assinatura"])) {
+      console.error("[webhook/venda] assinatura_invalida");
+      return responder(401, { erro: "assinatura invalida" });
+    }
+
+    let venda;
+    try {
+      venda = JSON.parse(corpoBruto.toString("utf8"));
+    } catch (erro) {
+      console.error("[webhook/venda] json_invalido:", erro.message);
+      return responder(400, { erro: "json invalido" });
+    }
+
+    const instante = Date.parse(venda.timestamp);
+    if (!Number.isFinite(instante) || Math.abs(Date.now() - instante) > 5 * 60 * 1000) {
+      console.error("[webhook/venda] timestamp_fora_da_janela");
+      return responder(401, { erro: "timestamp fora da janela de 5 minutos" });
+    }
+    const camposValidos = ["event_id", "order_id", "ativador"].every(
+      (campo) => typeof venda[campo] === "string" && venda[campo].trim(),
+    );
+    if (!camposValidos || typeof venda.timestamp !== "string") {
+      console.error("[webhook/venda] schema_incompleto");
+      return responder(400, { erro: "schema incompleto" });
+    }
+    if (eventosVenda.has(venda.event_id)) {
+      console.log(`[webhook/venda] duplicado ${venda.event_id}`);
+      return responder(200, { status: "duplicado" });
+    }
+
+    let cadastro;
+    try {
+      cadastro = acharPessoaDados(lerDadosJson("pessoas.json"), venda.ativador);
+    } catch (erro) {
+      return responder(500, { erro: erro.message });
+    }
+    if (!cadastro?.pessoa?.squad) {
+      appendFileSync(
+        CAMINHO_ORFAS,
+        `${JSON.stringify({ ...venda, recebido_em: new Date().toISOString() })}\n`,
+      );
+      console.error(`[webhook/venda] pendente_identidade ${venda.event_id}`);
+      return responder(202, { status: "pendente_identidade" });
+    }
+
+    try {
+      const config = lerDadosJson("config-pontos.json");
+      const semana = semanaISO(venda.timestamp);
+      const lancamentos = [
+        {
+          entry_id: randomUUID(),
+          event_id: venda.event_id,
+          tipo: "credito",
+          sujeito: `pessoa:${cadastro.pessoa.uuid}`,
+          delta: config.pontos_ativador,
+          motivo: "venda",
+          semana,
+          ts: venda.timestamp,
+        },
+        {
+          entry_id: randomUUID(),
+          event_id: venda.event_id,
+          tipo: "credito",
+          sujeito: `squad:${cadastro.pessoa.squad}`,
+          delta: config.pontos_squad,
+          motivo: "venda",
+          semana,
+          ts: venda.timestamp,
+        },
+      ];
+      if (lancamentos.some((item) => !Number.isFinite(item.delta))) {
+        throw new Error("config-pontos.json contem valor invalido");
+      }
+      registrarLancamentos(lancamentos);
+      console.log(`[webhook/venda] aceita ${venda.event_id}`);
+      return responder(201, { status: "aceita", event_id: venda.event_id });
+    } catch (erro) {
+      console.error("[webhook/venda] falha_persistencia:", erro.message);
+      return responder(500, { erro: erro.message });
+    }
+  }
+
+  if (req.method === "POST" && url.pathname === "/webhook/estorno") {
+    let corpoBruto;
+    try {
+      corpoBruto = await lerCorpoBruto(req);
+    } catch (erro) {
+      return responder(400, { erro: erro.message });
+    }
+    if (!assinaturaValida(corpoBruto, req.headers["x-assinatura"])) {
+      console.error("[webhook/estorno] assinatura_invalida");
+      return responder(401, { erro: "assinatura invalida" });
+    }
+
+    let estorno;
+    try {
+      estorno = JSON.parse(corpoBruto.toString("utf8"));
+    } catch {
+      return responder(400, { erro: "json invalido" });
+    }
+    if (typeof estorno.event_id_original !== "string" || !estorno.event_id_original.trim()) {
+      return responder(400, { erro: "schema incompleto" });
+    }
+    if (eventosEstornados.has(estorno.event_id_original)) {
+      return responder(200, { status: "duplicado" });
+    }
+
+    const originais = ledger.filter(
+      (item) =>
+        item.event_id === estorno.event_id_original &&
+        item.tipo === "credito" &&
+        item.motivo === "venda",
+    );
+    if (!originais.length) return responder(404, { erro: "venda original nao encontrada" });
+
+    try {
+      const agora = new Date().toISOString();
+      const lancamentos = originais.map((original) => ({
+        entry_id: randomUUID(),
+        event_id: `estorno:${estorno.event_id_original}`,
+        event_id_original: estorno.event_id_original,
+        tipo: "estorno",
+        sujeito: original.sujeito,
+        delta: -original.delta,
+        motivo: "estorno",
+        semana: original.semana,
+        ts: agora,
+        reversal_of: original.entry_id,
+      }));
+      registrarLancamentos(lancamentos);
+      console.log(`[webhook/estorno] aceito ${estorno.event_id_original}`);
+      return responder(201, { status: "estornado", event_id_original: estorno.event_id_original });
+    } catch (erro) {
+      console.error("[webhook/estorno] falha_persistencia:", erro.message);
+      return responder(500, { erro: erro.message });
+    }
+  }
 
   if (req.method === "GET" && url.pathname === "/diretoria/modo") {
     try {
@@ -258,7 +498,15 @@ const server = createServer(async (req, res) => {
 
   responder(404, {
     erro: "rota desconhecida",
-    rotas: ["/pessoas/:nome", "/squads", "/diretoria/modo", "/api/room/access", "/api/lista"],
+    rotas: [
+      "/pessoas/:nome",
+      "/squads",
+      "/diretoria/modo",
+      "/webhook/venda",
+      "/webhook/estorno",
+      "/api/room/access",
+      "/api/lista",
+    ],
   });
 });
 
