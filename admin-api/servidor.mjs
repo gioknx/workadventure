@@ -20,6 +20,9 @@ const DADOS = join(AQUI, "dados");
 const CAMINHO_LEDGER = join(DADOS, "ledger.jsonl");
 const CAMINHO_ORFAS = join(DADOS, "vendas-orfas.jsonl");
 const SEGREDO_WEBHOOK = process.env.HQ_WEBHOOK_SECRET ?? "";
+const URL_EVENTO_GLOBAL =
+  process.env.HQ_PLAY_EVENT_URL ?? "http://play.workadventure.test/global/event";
+const TOKEN_ADMIN = process.env.ADMIN_API_TOKEN ?? "123";
 
 function lerDadosJson(nome) {
   const caminho = join(DADOS, nome);
@@ -161,6 +164,29 @@ function registrarLancamentos(lancamentos) {
   gravarDadosJson("estado-pontos.json", estadoPontos);
 }
 
+async function dispararSinoGlobal(nome, squadId) {
+  const squad = lerDadosJson("squads.json")[squadId];
+  if (!squad) throw new Error(`squad desconhecida: ${squadId}`);
+  const resposta = await fetch(URL_EVENTO_GLOBAL, {
+    method: "POST",
+    headers: {
+      Authorization: TOKEN_ADMIN,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name: "hq-venda",
+      data: {
+        ativador_nome: nome,
+        squad: squadId,
+        squad_cor: squad.cor,
+      },
+    }),
+  });
+  if (!resposta.ok) {
+    throw new Error(`evento global respondeu ${resposta.status}: ${await resposta.text()}`);
+  }
+}
+
 reconstruirEstadoPontos();
 
 const server = createServer(async (req, res) => {
@@ -261,8 +287,15 @@ const server = createServer(async (req, res) => {
         throw new Error("config-pontos.json contem valor invalido");
       }
       registrarLancamentos(lancamentos);
+      let sino = "disparado";
+      try {
+        await dispararSinoGlobal(cadastro.nome, cadastro.pessoa.squad);
+      } catch (erro) {
+        sino = "falhou";
+        console.error(`[webhook/venda] sino_falhou ${venda.event_id}:`, erro.message);
+      }
       console.log(`[webhook/venda] aceita ${venda.event_id}`);
-      return responder(201, { status: "aceita", event_id: venda.event_id });
+      return responder(201, { status: "aceita", event_id: venda.event_id, sino });
     } catch (erro) {
       console.error("[webhook/venda] falha_persistencia:", erro.message);
       return responder(500, { erro: erro.message });
