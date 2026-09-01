@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Placar comercial</title>
+<style>
+  :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #0b1020; color: #f8fafc; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 50% -20%, #24314f 0, #0b1020 48%); }
+  button { font: inherit; }
+  .painel { width: min(760px, 100%); margin: 0 auto; padding: 24px; }
+  header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+  .sobrelinha { margin: 0 0 5px; color: #94a3b8; font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+  h1 { margin: 0; font-size: clamp(24px, 5vw, 36px); letter-spacing: -.04em; }
+  #periodo { margin: 6px 0 0; color: #cbd5e1; font-size: 14px; }
+  .modos { display: inline-flex; padding: 4px; border: 1px solid #334155; border-radius: 11px; background: #111827; }
+  .modos button { border: 0; border-radius: 8px; padding: 8px 12px; background: transparent; color: #94a3b8; cursor: pointer; }
+  .modos button[aria-pressed="true"] { background: #f8fafc; color: #0f172a; font-weight: 900; }
+  .destaque { display: grid; grid-template-columns: 1.5fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .lider, .vip, .bloco { border: 1px solid #273449; border-radius: 16px; background: rgba(15, 23, 42, .88); box-shadow: 0 16px 50px rgba(0,0,0,.22); }
+  .lider, .vip { min-height: 132px; padding: 18px; }
+  .rotulo { color: #94a3b8; font-size: 11px; font-weight: 900; letter-spacing: .11em; text-transform: uppercase; }
+  #lider-nome { display: block; margin: 12px 0 2px; font-size: 28px; font-weight: 950; }
+  #lider-pontos { color: #cbd5e1; font-size: 14px; }
+  #vip-nome { display: block; margin: 12px 0 4px; color: #cbd5e1; font-size: 20px; font-weight: 950; }
+  .vip.tem-dono #vip-nome { color: #facc15; }
+  #vip-semana { color: #cbd5e1; font-size: 13px; }
+  .grade { display: grid; grid-template-columns: 1.15fr .85fr; gap: 14px; }
+  .bloco { padding: 18px; }
+  h2 { margin: 0 0 12px; font-size: 15px; }
+  ol { list-style: none; margin: 0; padding: 0; }
+  li { display: grid; grid-template-columns: 28px minmax(0,1fr) auto; align-items: center; gap: 10px; min-height: 45px; border-top: 1px solid #1e293b; }
+  li:first-child { border-top: 0; }
+  .posicao { color: #64748b; font-size: 12px; font-weight: 900; }
+  .nome { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 800; }
+  .meta { color: #94a3b8; font-size: 11px; }
+  .pontos { font-variant-numeric: tabular-nums; font-weight: 950; }
+  .squad .nome::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 9px; border-radius: 50%; background: var(--cor); box-shadow: 0 0 10px color-mix(in srgb, var(--cor), transparent 35%); }
+  #estado { margin: 14px 0 0; color: #94a3b8; font-size: 12px; text-align: center; }
+  #estado.erro { color: #fca5a5; }
+  @media (max-width: 620px) {
+    .painel { padding: 16px; }
+    header { align-items: stretch; flex-direction: column; }
+    .modos { align-self: flex-start; }
+    .destaque, .grade { grid-template-columns: 1fr; }
+  }
+  @media print {
+    :root, body { background: #fff; color: #111; }
+    .painel { width: 100%; padding: 0; }
+    .modos, #estado { display: none; }
+    .lider, .vip, .bloco { border-color: #bbb; background: #fff; box-shadow: none; break-inside: avoid; }
+    .rotulo, .meta, #periodo, #lider-pontos, #vip-semana { color: #444; }
+  }
+</style>
+</head>
+<body>
+<main class="painel">
+  <header>
+    <div>
+      <p class="sobrelinha">HQ comercial</p>
+      <h1>Placar de prestígio</h1>
+      <p id="periodo">Carregando a semana…</p>
+    </div>
+    <nav class="modos" aria-label="Período do placar">
+      <button id="modo-semana" type="button" aria-pressed="true">Semana</button>
+      <button id="modo-geral" type="button" aria-pressed="false">Geral</button>
+    </nav>
+  </header>
+
+  <section class="destaque" aria-label="Resumo">
+    <article class="lider">
+      <span class="rotulo">Líder agora</span>
+      <strong id="lider-nome">—</strong>
+      <span id="lider-pontos">0 pontos</span>
+    </article>
+    <article class="vip">
+      <span class="rotulo">Sala VIP</span>
+      <strong id="vip-nome">Sem detentor</strong>
+      <span id="vip-semana">A primeira semana ainda não fechou.</span>
+    </article>
+  </section>
+
+  <section class="grade">
+    <article class="bloco">
+      <h2>Squads</h2>
+      <ol id="squads"></ol>
+    </article>
+    <article class="bloco">
+      <h2>Top pessoas</h2>
+      <ol id="pessoas"></ol>
+    </article>
+  </section>
+  <p id="estado" role="status">Conectando ao placar…</p>
+</main>
+<script>
+(function () {
+  const API = "http://localhost:8901";
+  let modo = "semana";
+  const elementos = {
+    estado: document.getElementById("estado"),
+    liderNome: document.getElementById("lider-nome"),
+    liderPontos: document.getElementById("lider-pontos"),
+    periodo: document.getElementById("periodo"),
+    pessoas: document.getElementById("pessoas"),
+    squads: document.getElementById("squads"),
+    vipCard: document.querySelector(".vip"),
+    vipNome: document.getElementById("vip-nome"),
+    vipSemana: document.getElementById("vip-semana"),
+  };
+
+  function linhaSquad(item, indice) {
+    const linha = document.createElement("li");
+    linha.className = "squad";
+    linha.style.setProperty("--cor", item.cor || "#94a3b8");
+    linha.innerHTML = `<span class="posicao">${item.pontos > 0 ? indice + 1 : "—"}</span><span class="nome"></span><strong class="pontos"></strong>`;
+    linha.querySelector(".nome").textContent = item.nome;
+    linha.querySelector(".pontos").textContent = String(item.pontos);
+    return linha;
+  }
+
+  function linhaPessoa(item, indice) {
+    const linha = document.createElement("li");
+    linha.innerHTML = `<span class="posicao">${item.pontos > 0 ? indice + 1 : "—"}</span><span><span class="nome"></span><br><span class="meta"></span></span><strong class="pontos"></strong>`;
+    linha.querySelector(".nome").textContent = item.nome;
+    linha.querySelector(".meta").textContent = item.squad || "sem squad";
+    linha.querySelector(".pontos").textContent = String(item.pontos);
+    return linha;
+  }
+
+  function substituirLista(alvo, itens, fabrica) {
+    alvo.replaceChildren(...itens.map(fabrica));
+  }
+
+  function renderizar(dados) {
+    substituirLista(elementos.squads, dados.squads || [], linhaSquad);
+    substituirLista(elementos.pessoas, dados.pessoas || [], linhaPessoa);
+    const primeiro = dados.squads && dados.squads[0];
+    const lider = primeiro && primeiro.pontos > 0 ? primeiro : null;
+    elementos.liderNome.textContent = lider ? lider.nome : "Sem pontuação";
+    elementos.liderPontos.textContent = `${lider ? lider.pontos : 0} pontos`;
+    elementos.periodo.textContent = modo === "semana" ? `Semana ${dados.semana}` : "Acumulado geral";
+    const vipSquad = dados.vip && dados.vip.squad_vencedor;
+    elementos.vipCard.classList.toggle("tem-dono", Boolean(vipSquad));
+    elementos.vipNome.textContent = vipSquad || "Sem detentor";
+    elementos.vipSemana.textContent = dados.vip && dados.vip.semana ? `Desde a semana ${dados.vip.semana}` : "A primeira semana ainda não fechou.";
+    elementos.estado.textContent = "Atualizado agora";
+    elementos.estado.className = "";
+    document.documentElement.dataset.state = "ready";
+  }
+
+  async function atualizar() {
+    try {
+      const resposta = await fetch(`${API}/placar/${modo}`, { cache: "no-store" });
+      if (!resposta.ok) throw new Error(String(resposta.status));
+      renderizar(await resposta.json());
+    } catch (erro) {
+      elementos.estado.textContent = "Placar sem sinal da Admin API";
+      elementos.estado.className = "erro";
+      document.documentElement.dataset.state = "error";
+    }
+  }
+
+  function trocar(proximo) {
+    modo = proximo;
+    document.getElementById("modo-semana").setAttribute("aria-pressed", String(modo === "semana"));
+    document.getElementById("modo-geral").setAttribute("aria-pressed", String(modo === "geral"));
+    atualizar();
+  }
+
+  document.getElementById("modo-semana").addEventListener("click", function () { trocar("semana"); });
+  document.getElementById("modo-geral").addEventListener("click", function () { trocar("geral"); });
+  window.placarComercial = { atualizar, renderizar, trocar };
+  atualizar();
+  setInterval(atualizar, 5000);
+})();
+</script>
+</body>
+</html>

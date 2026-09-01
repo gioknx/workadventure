@@ -187,6 +187,34 @@ async function dispararSinoGlobal(nome, squadId) {
   }
 }
 
+function montarPlacar(saldos, semana = null) {
+  const squads = lerDadosJson("squads.json");
+  const pessoas = lerDadosJson("pessoas.json");
+  const linhasSquads = Object.entries(squads)
+    .map(([id, squad]) => ({
+      id,
+      nome: squad.nome,
+      cor: squad.cor,
+      pontos: saldos[`squad:${id}`] ?? 0,
+    }))
+    .sort((a, b) => b.pontos - a.pontos || a.nome.localeCompare(b.nome, "pt-BR"));
+  const linhasPessoas = Object.entries(pessoas)
+    .map(([nome, pessoa]) => ({
+      nome,
+      uuid: pessoa.uuid,
+      squad: pessoa.squad,
+      pontos: saldos[`pessoa:${pessoa.uuid}`] ?? 0,
+    }))
+    .sort((a, b) => b.pontos - a.pontos || a.nome.localeCompare(b.nome, "pt-BR"))
+    .slice(0, 5);
+  return {
+    semana,
+    squads: linhasSquads,
+    pessoas: linhasPessoas,
+    vip: lerDadosJson("vip.json"),
+  };
+}
+
 reconstruirEstadoPontos();
 
 const server = createServer(async (req, res) => {
@@ -204,6 +232,24 @@ const server = createServer(async (req, res) => {
   };
 
   if (req.method === "OPTIONS") return responder(204, {});
+
+  if (req.method === "GET" && url.pathname === "/placar/semana") {
+    try {
+      const semana = url.searchParams.get("semana") || semanaISO(Date.now());
+      const saldos = estadoPontos.semanas[semana]?.saldos ?? {};
+      return responder(200, montarPlacar(saldos, semana));
+    } catch (erro) {
+      return responder(500, { erro: erro.message });
+    }
+  }
+
+  if (req.method === "GET" && url.pathname === "/placar/geral") {
+    try {
+      return responder(200, montarPlacar(estadoPontos.saldos));
+    } catch (erro) {
+      return responder(500, { erro: erro.message });
+    }
+  }
 
   if (req.method === "POST" && url.pathname === "/webhook/venda") {
     let corpoBruto;
@@ -537,6 +583,8 @@ const server = createServer(async (req, res) => {
       "/diretoria/modo",
       "/webhook/venda",
       "/webhook/estorno",
+      "/placar/semana",
+      "/placar/geral",
       "/api/room/access",
       "/api/lista",
     ],
