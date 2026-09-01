@@ -16,5 +16,13 @@
     "squad": "fernando",
     "tags": [],
     "_pendente_confirmar": true
+  },
+  "Mind": {
+    "uuid": "515fbd79-acf0-42d2-b52e-fac165896fdd",
+    "squad": null,
+    "tags": [
+      "diretoria"
+    ],
+    "_pendente_confirmar": false
   }
 }

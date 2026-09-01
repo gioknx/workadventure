@@ -9,7 +9,7 @@
 // Porta 8901.
 
 import { createServer } from "node:http";
-import { readFileSync } from "node:fs";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -42,14 +42,72 @@ function achar(lista, email) {
   return lista.pessoas.find(p => p.email.toLowerCase() === email.toLowerCase()) ?? null;
 }
 
-const server = createServer((req, res) => {
+function acharPessoaDados(pessoas, identificador) {
+  if (!identificador) return null;
+  const valor = String(identificador).trim();
+  const candidatos = [valor, valor.split("@")[0]].map((item) => item.toLowerCase());
+  for (const [nome, pessoa] of Object.entries(pessoas)) {
+    if (candidatos.includes(nome.toLowerCase()) || pessoa.uuid?.toLowerCase() === valor.toLowerCase()) {
+      return { nome, pessoa };
+    }
+  }
+}
+
+async function lerCorpoJson(req) {
+  let corpo = "";
+  for await (const parte of req) {
+    corpo += parte;
+    if (corpo.length > 1_000_000) throw new Error("corpo excede 1 MB");
+  }
+  return corpo ? JSON.parse(corpo) : {};
+}
+
+function gravarDadosJson(nome, dados) {
+  const destino = join(DADOS, nome);
+  const temporario = `${destino}.tmp`;
+  writeFileSync(temporario, `${JSON.stringify(dados, null, 2)}\n`);
+  renameSync(temporario, destino);
+}
+
+const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORTA}`);
   const lista = convidados();
   const responder = (codigo, corpo) => {
-    res.writeHead(codigo, { "Content-Type": "application/json" });
+    res.writeHead(codigo, {
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Assinatura",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "application/json",
+    });
     res.end(JSON.stringify(corpo));
     console.log(`${codigo} ${url.pathname}${url.search}`);
   };
+
+  if (req.method === "OPTIONS") return responder(204, {});
+
+  if (req.method === "GET" && url.pathname === "/diretoria/modo") {
+    try {
+      return responder(200, lerDadosJson("config-diretoria.json"));
+    } catch (erro) {
+      return responder(500, { erro: erro.message });
+    }
+  }
+
+  if (req.method === "POST" && url.pathname === "/diretoria/modo") {
+    try {
+      const atual = lerDadosJson("config-diretoria.json");
+      const pedido = await lerCorpoJson(req);
+      const modo = pedido.modo ?? (atual.modo === "fechada" ? "aberta" : "fechada");
+      if (!["aberta", "fechada"].includes(modo)) {
+        return responder(400, { erro: "modo deve ser aberta ou fechada" });
+      }
+      const proximo = { modo };
+      gravarDadosJson("config-diretoria.json", proximo);
+      return responder(200, proximo);
+    } catch (erro) {
+      return responder(400, { erro: erro.message });
+    }
+  }
 
   if (req.method === "GET" && url.pathname.startsWith("/pessoas/")) {
     try {
@@ -92,10 +150,9 @@ const server = createServer((req, res) => {
     return responder(200, { "api/woka/list": "v1", "api/companion/list": "v1" });
   }
 
-  // Aparencia dos avatares e companheiros: devolve o padrao do proprio jogo
-  if (url.pathname === "/api/woka/list" || url.pathname === "/api/companion/list") {
-    return responder(200, {});
-  }
+  // Aparencia dos avatares e companheiros: devolve o padrao do proprio jogo.
+  if (url.pathname === "/api/woka/list") return responder(200, {});
+  if (url.pathname === "/api/companion/list") return responder(200, []);
 
   // Dados do mapa pedido
   if (url.pathname === "/api/map") {
@@ -118,12 +175,34 @@ const server = createServer((req, res) => {
     return responder(200, resposta);
   }
 
-  // O jogo pergunta: esse cara pode entrar nesta sala?
+  // O jogo pergunta: essa identidade pode entrar nesta sala?
   if (url.pathname === "/api/room/access") {
-    const email = url.searchParams.get("userIdentifier");
-    const pessoa = achar(lista, email);
+    const identificador = url.searchParams.get("userIdentifier");
+    let cadastro = null;
+    try {
+      cadastro = acharPessoaDados(lerDadosJson("pessoas.json"), identificador);
+      const sala = url.searchParams.get("roomId") ?? url.searchParams.get("playUri") ?? "";
+      const diretoriaFechada = /diretoria-fechada\.tmj(?:$|[?#])/.test(sala);
+      const modoDiretoria = diretoriaFechada ? lerDadosJson("config-diretoria.json").modo : null;
+      const autorizadoDiretoria =
+        modoDiretoria === "aberta" || cadastro?.pessoa?.tags?.includes("diretoria");
+      if (diretoriaFechada && !autorizadoDiretoria) {
+        return responder(200, {
+          status: "error",
+          type: "error",
+          code: "DIRETORIA_FECHADA",
+          title: "Diretoria fechada",
+          subtitle: "Sua identidade nao tem autorizacao para esta sala.",
+          details: "A permissao e conferida pelo servidor.",
+          image: "",
+        });
+      }
+    } catch (erro) {
+      return responder(500, { erro: erro.message });
+    }
 
-    if (!lista.aberto && !pessoa) {
+    const convidado = achar(lista, identificador);
+    if (!lista.aberto && !convidado) {
       return responder(200, {
         status: "error",
         type: "error",
@@ -134,22 +213,24 @@ const server = createServer((req, res) => {
         image: "",
       });
     }
-    if (pessoa?.banido) {
+    if (convidado?.banido) {
       return responder(200, {
         status: "error",
         type: "error",
         code: "BANIDO",
         title: "Acesso removido",
         subtitle: "Voce foi banido deste mundo.",
-        details: pessoa.motivo ?? "",
+        details: convidado.motivo ?? "",
         image: "",
       });
     }
+
+    const tags = cadastro?.pessoa?.tags ?? convidado?.papeis ?? [];
     const corpo = {
       status: "ok",
-      email,
-      userUuid: email ?? "anonimo",
-      tags: pessoa?.papeis ?? [],
+      email: identificador ?? null,
+      userUuid: cadastro?.pessoa?.uuid ?? identificador ?? "anonimo",
+      tags,
       visitCardUrl: null,
       isCharacterTexturesValid: true,
       characterTextures: [],
@@ -157,10 +238,11 @@ const server = createServer((req, res) => {
       companionTexture: null,
       messages: [],
       activatedInviteUser: true,
-      canEdit: Boolean(pessoa?.papeis?.includes("admin")),
+      canEdit: tags.includes("admin"),
       world: "hq",
     };
-    if (pessoa) corpo.username = pessoa.email.split("@")[0];
+    if (cadastro) corpo.username = cadastro.nome;
+    else if (convidado) corpo.username = convidado.email.split("@")[0];
     return responder(200, corpo);
   }
 
@@ -174,7 +256,10 @@ const server = createServer((req, res) => {
     });
   }
 
-  responder(404, { erro: "rota desconhecida", rotas: ["/api/room/access", "/api/lista"] });
+  responder(404, {
+    erro: "rota desconhecida",
+    rotas: ["/pessoas/:nome", "/squads", "/diretoria/modo", "/api/room/access", "/api/lista"],
+  });
 });
 
 server.listen(PORTA, () => {

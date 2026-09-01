@@ -1,79 +1,70 @@
 /**
- * Porta da Diretoria — a sala fica visível, mas a soleira é seletiva.
- * Autoriza papéis vindos da room API, nomes locais de desenvolvimento ou convite por URL.
+ * Porta da Diretoria — a decisão visual consulta o mesmo cadastro que a
+ * Admin API usa para bloquear o mapa fechado no servidor.
  */
 
-const CONVIDADOS = ["Mind", "Gio", "Giovani"];
-const PAPEIS_AUTORIZADOS = new Set(["dono", "admin", "diretoria"]);
-const CODIGO = "DIRETORIA";
+const ADMIN_API = "http://localhost:8901";
+const SALA_DIRETORIA = "diretoria-fechada.tmj#from-hq";
 const VOLTA = { x: 26.5 * 32, y: 11.5 * 32 };
 
-function referenciasDaPagina() {
-  const referencias = [window.location.href, document.referrer];
-  try {
-    referencias.push(window.parent.location.href);
-  } catch {
-    // O iframe do mapa e a página do jogo podem estar em origens diferentes.
-  }
-  return referencias.filter(Boolean);
+async function consultar(caminho) {
+  const resposta = await fetch(`${ADMIN_API}${caminho}`);
+  if (!resposta.ok) throw new Error(`API respondeu ${resposta.status}`);
+  return await resposta.json();
 }
 
-function temConvite() {
-  const papeis = Array.isArray(WA.player.tags) ? WA.player.tags : [];
-  if (papeis.some((papel) => PAPEIS_AUTORIZADOS.has(String(papel).toLowerCase()))) {
-    return "papel";
-  }
-
-  const nome = String(WA.player.name || "").trim();
-  if (CONVIDADOS.some((convidado) => convidado.toLowerCase() === nome.toLowerCase())) {
-    return "lista";
-  }
-
-  const convite = `CONVITE=${CODIGO}`;
-  if (referenciasDaPagina().some((referencia) => referencia.toUpperCase().includes(convite))) {
-    return "convite";
-  }
-
-  return null;
+function avisar(id, text, bgColor, timeToClose = 4000) {
+  WA.ui.banner.openBanner({
+    id,
+    text,
+    bgColor,
+    textColor: "#ffffff",
+    closable: true,
+    timeToClose,
+  });
 }
 
 WA.onInit().then(() => {
-  let bloqueando = false;
+  let verificando = false;
+  let navegando = false;
 
-  const verificarEntrada = (mostrarPermissao = false) => {
-    const via = temConvite();
-    if (via) {
-      if (mostrarPermissao) {
-        WA.ui.banner.openBanner({
-          id: "porta-ok",
-          text: "Diretoria — entrada autorizada.",
-          bgColor: "#1e7f5c",
-          textColor: "#ffffff",
-          closable: true,
-          timeToClose: 3000,
-        });
+  const verificarEntrada = async () => {
+    if (verificando || navegando) return;
+    verificando = true;
+    try {
+      const { modo } = await consultar("/diretoria/modo");
+      if (modo === "aberta") {
+        navegando = true;
+        await WA.nav.goToRoom(SALA_DIRETORIA);
+        return;
       }
-      return;
-    }
 
-    if (bloqueando) return;
-    bloqueando = true;
-    WA.ui.banner.openBanner({
-      id: "porta-trancada",
-      text: "Diretoria — você pode ver, mas a entrada exige convite.",
-      bgColor: "#8f2b2b",
-      textColor: "#ffffff",
-      closable: true,
-      timeToClose: 5000,
-    });
-    WA.player.teleport(VOLTA.x, VOLTA.y);
-    setTimeout(() => {
-      bloqueando = false;
-    }, 1200);
+      const nome = String(WA.player.name || "").trim();
+      let pessoa = null;
+      try {
+        pessoa = await consultar(`/pessoas/${encodeURIComponent(nome)}`);
+      } catch (erro) {
+        if (!erro.message.includes("404")) throw erro;
+      }
+      if (Array.isArray(pessoa?.tags) && pessoa.tags.includes("diretoria")) {
+        navegando = true;
+        await WA.nav.goToRoom(SALA_DIRETORIA);
+        return;
+      }
+
+      avisar("porta-trancada", "Diretoria fechada — sua identidade não tem autorização.", "#8f2b2b", 5000);
+      await WA.player.teleport(VOLTA.x, VOLTA.y);
+    } catch (erro) {
+      avisar("porta-indisponivel", "Diretoria indisponível — não foi possível confirmar sua autorização.", "#8f2b2b", 5000);
+      await WA.player.teleport(VOLTA.x, VOLTA.y);
+      console.error("[porta] falha ao consultar autorização:", erro);
+    } finally {
+      verificando = false;
+    }
   };
 
-  WA.room.area.onEnter("PortaDiretoria").subscribe(() => verificarEntrada(true));
-  WA.room.area.onEnter("Diretoria").subscribe(() => verificarEntrada(false));
+  WA.room.area.onEnter("PortaDiretoria").subscribe(verificarEntrada);
+  WA.room.area.onEnter("Diretoria").subscribe(verificarEntrada);
 
-  console.log("[porta] Diretoria visível; soleira seletiva ativa.");
+  console.log("[porta] Diretoria fechada; autorização canônica ativa.");
 });
