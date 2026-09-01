@@ -1,0 +1,26 @@
+[
+  {
+    "id": "chique-bronze",
+    "nome": "Blazer Bronze",
+    "preco_pontos": 50,
+    "textura": "http://maps.workadventure.test/hq/wokas/chique-bronze.png"
+  },
+  {
+    "id": "chique-prata",
+    "nome": "Blazer Prata",
+    "preco_pontos": 100,
+    "textura": "http://maps.workadventure.test/hq/wokas/chique-prata.png"
+  },
+  {
+    "id": "chique-ouro",
+    "nome": "Blazer Ouro",
+    "preco_pontos": 200,
+    "textura": "http://maps.workadventure.test/hq/wokas/chique-ouro.png"
+  },
+  {
+    "id": "chique-diamante",
+    "nome": "Blazer Diamante",
+    "preco_pontos": 400,
+    "textura": "http://maps.workadventure.test/hq/wokas/chique-diamante.png"
+  }
+]

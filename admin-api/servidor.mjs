@@ -20,6 +20,7 @@ const DADOS = join(AQUI, "dados");
 const CAMINHO_LEDGER = join(DADOS, "ledger.jsonl");
 const CAMINHO_ORFAS = join(DADOS, "vendas-orfas.jsonl");
 const CAMINHO_INVASOES_VIP = join(DADOS, "invasoes-vip.jsonl");
+const CAMINHO_WOKA_BASE = join(AQUI, "../play/src/pusher/data/woka.json");
 const SEGREDO_WEBHOOK = process.env.HQ_WEBHOOK_SECRET ?? "";
 const URL_EVENTO_GLOBAL =
   process.env.HQ_PLAY_EVENT_URL ?? "http://play.workadventure.test/global/event";
@@ -261,6 +262,42 @@ function fecharSemana(semana, forcar = false) {
   return proximo;
 }
 
+function listaWokaPara(cadastro) {
+  const base = JSON.parse(readFileSync(CAMINHO_WOKA_BASE, "utf8"));
+  const inventario = lerDadosJson("inventario.json");
+  const resgatadas = new Set(
+    (cadastro ? inventario[cadastro.pessoa.uuid] ?? [] : []).map((item) => item.skin_id),
+  );
+  const chiques = lerDadosJson("catalogo-skins.json")
+    .filter((skin) => resgatadas.has(skin.id))
+    .map((skin) => ({ id: skin.id, name: skin.nome, url: skin.textura }));
+  base.woka ??= { collections: [] };
+  base.woka.collections.push({ name: "Chiques", textures: chiques });
+  return base;
+}
+
+function mapaTexturasPermitidas(cadastro) {
+  const permitidas = new Map();
+  for (const parte of Object.values(listaWokaPara(cadastro))) {
+    for (const colecao of parte.collections ?? []) {
+      for (const textura of colecao.textures ?? []) {
+        permitidas.set(textura.id, { id: textura.id, url: textura.url });
+      }
+    }
+  }
+  return permitidas;
+}
+
+function parametrosArray(url, nome) {
+  const valores = [];
+  for (const [chave, valor] of url.searchParams.entries()) {
+    if (chave === nome || chave === `${nome}[]` || chave.startsWith(`${nome}[`)) {
+      valores.push(valor);
+    }
+  }
+  return valores;
+}
+
 reconstruirEstadoPontos();
 
 const server = createServer(async (req, res) => {
@@ -337,6 +374,89 @@ const server = createServer(async (req, res) => {
       return responder(200, montarPlacar(estadoPontos.saldos));
     } catch (erro) {
       return responder(500, { erro: erro.message });
+    }
+  }
+
+  if (req.method === "GET" && url.pathname === "/catalogo-skins") {
+    try {
+      return responder(200, lerDadosJson("catalogo-skins.json"));
+    } catch (erro) {
+      return responder(500, { erro: erro.message });
+    }
+  }
+
+  if (req.method === "GET" && url.pathname.startsWith("/saldo/")) {
+    try {
+      const nome = decodeURIComponent(url.pathname.slice("/saldo/".length));
+      const cadastro = acharPessoaDados(lerDadosJson("pessoas.json"), nome);
+      if (!cadastro) return responder(404, { erro: "pessoa nao encontrada" });
+      const inventario = lerDadosJson("inventario.json");
+      return responder(200, {
+        nome: cadastro.nome,
+        uuid: cadastro.pessoa.uuid,
+        pontos: estadoPontos.saldos[`pessoa:${cadastro.pessoa.uuid}`] ?? 0,
+        inventario: inventario[cadastro.pessoa.uuid] ?? [],
+      });
+    } catch (erro) {
+      return responder(500, { erro: erro.message });
+    }
+  }
+
+  if (req.method === "POST" && url.pathname === "/resgate") {
+    try {
+      const pedido = await lerCorpoJson(req);
+      const cadastro = acharPessoaDados(lerDadosJson("pessoas.json"), pedido.nome);
+      if (!cadastro) return responder(404, { erro: "pessoa nao encontrada" });
+      const catalogo = lerDadosJson("catalogo-skins.json");
+      const skin = catalogo.find((item) => item.id === pedido.skin_id);
+      if (!skin) return responder(404, { erro: "skin nao encontrada" });
+      const inventario = lerDadosJson("inventario.json");
+      const itens = Array.isArray(inventario[cadastro.pessoa.uuid])
+        ? inventario[cadastro.pessoa.uuid]
+        : [];
+      const existente = itens.find((item) => item.skin_id === skin.id);
+      const saldo = estadoPontos.saldos[`pessoa:${cadastro.pessoa.uuid}`] ?? 0;
+      if (existente) {
+        return responder(200, {
+          status: "ja_resgatada",
+          skin_id: skin.id,
+          pontos: saldo,
+          granted_from: existente.granted_from,
+        });
+      }
+      if (saldo < skin.preco_pontos) {
+        return responder(409, {
+          erro: "pontos insuficientes",
+          pontos: saldo,
+          necessario: skin.preco_pontos,
+        });
+      }
+      const agora = new Date().toISOString();
+      const lancamento = {
+        entry_id: randomUUID(),
+        event_id: `resgate:${cadastro.pessoa.uuid}:${skin.id}:${randomUUID()}`,
+        tipo: "debito",
+        sujeito: `pessoa:${cadastro.pessoa.uuid}`,
+        delta: -skin.preco_pontos,
+        motivo: "resgate_skin",
+        skin_id: skin.id,
+        semana: semanaISO(agora),
+        ts: agora,
+      };
+      registrarLancamentos([lancamento]);
+      itens.push({ skin_id: skin.id, granted_from: lancamento.entry_id });
+      inventario[cadastro.pessoa.uuid] = itens;
+      gravarDadosJson("inventario.json", inventario);
+      console.log(`[resgate] ${cadastro.nome} resgatou ${skin.id} por ${skin.preco_pontos}`);
+      return responder(201, {
+        status: "resgatada",
+        skin_id: skin.id,
+        pontos: saldo - skin.preco_pontos,
+        granted_from: lancamento.entry_id,
+      });
+    } catch (erro) {
+      console.error("[resgate] falha:", erro.message);
+      return responder(400, { erro: erro.message });
     }
   }
 
@@ -558,8 +678,18 @@ const server = createServer(async (req, res) => {
     return responder(200, { "api/woka/list": "v1", "api/companion/list": "v1" });
   }
 
-  // Aparencia dos avatares e companheiros: devolve o padrao do proprio jogo.
-  if (url.pathname === "/api/woka/list") return responder(200, {});
+  // Aparencia dos avatares: base nativa mais a colecao Chiques resgatada pelo jogador.
+  if (req.method === "GET" && url.pathname === "/api/woka/list") {
+    try {
+      const cadastro = acharPessoaDados(
+        lerDadosJson("pessoas.json"),
+        url.searchParams.get("uuid"),
+      );
+      return responder(200, listaWokaPara(cadastro));
+    } catch (erro) {
+      return responder(500, { erro: erro.message });
+    }
+  }
   if (url.pathname === "/api/companion/list") return responder(200, []);
 
   // Dados do mapa pedido
@@ -634,14 +764,21 @@ const server = createServer(async (req, res) => {
     }
 
     const tags = cadastro?.pessoa?.tags ?? convidado?.papeis ?? [];
+    const texturasPedidas = parametrosArray(url, "characterTextureIds");
+    const texturasPermitidas = mapaTexturasPermitidas(cadastro);
+    const characterTextures = texturasPedidas
+      .map((id) => texturasPermitidas.get(id))
+      .filter(Boolean);
+    const texturasValidas =
+      texturasPedidas.length > 0 && characterTextures.length === texturasPedidas.length;
     const corpo = {
       status: "ok",
       email: identificador ?? null,
       userUuid: cadastro?.pessoa?.uuid ?? identificador ?? "anonimo",
       tags,
       visitCardUrl: null,
-      isCharacterTexturesValid: true,
-      characterTextures: [],
+      isCharacterTexturesValid: texturasValidas,
+      characterTextures,
       isCompanionTextureValid: true,
       companionTexture: null,
       messages: [],
@@ -676,6 +813,9 @@ const server = createServer(async (req, res) => {
       "/placar/geral",
       "/vip",
       "/vip/invasao",
+      "/catalogo-skins",
+      "/saldo/:nome",
+      "/resgate",
       "/api/room/access",
       "/api/lista",
     ],

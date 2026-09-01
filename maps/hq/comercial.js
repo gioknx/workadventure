@@ -90,6 +90,26 @@ WA.onInit()
         placarSite = null;
       }
     });
+
+    let lojaSite = null;
+    WA.room.area.onEnter("loja").subscribe(function () {
+      if (lojaSite) return;
+      const nome = encodeURIComponent(String(WA.player.name || "").trim());
+      WA.ui.website.open({
+        url: `http://maps.workadventure.test/hq/loja.html?v=nv1f4&nome=${nome}`,
+        position: { vertical: "middle", horizontal: "middle" },
+        size: { height: "660px", width: "920px" },
+        allowApi: false,
+      }).then(function (site) {
+        lojaSite = site;
+      });
+    });
+    WA.room.area.onLeave("loja").subscribe(function () {
+      if (lojaSite) {
+        lojaSite.close();
+        lojaSite = null;
+      }
+    });
   })
   .catch(function (erro) {
     console.error("[COMERCIAL] falha ao iniciar", erro);
