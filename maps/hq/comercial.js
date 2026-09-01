@@ -98,7 +98,7 @@ WA.onInit()
       WA.ui.website.open({
         url: `http://maps.workadventure.test/hq/loja.html?v=nv1f4&nome=${nome}`,
         position: { vertical: "middle", horizontal: "middle" },
-        size: { height: "660px", width: "920px" },
+        size: { height: "500px", width: "920px" },
         allowApi: false,
       }).then(function (site) {
         lojaSite = site;

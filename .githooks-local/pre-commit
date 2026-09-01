@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Reversão: git config --local --unset core.hooksPath
+while IFS= read -r -d '' arquivo; do
+  case "$arquivo" in
+    admin-api/*.mjs|maps/hq/*.js)
+      [[ -f "$arquivo" ]] && node --check "$arquivo"
+      ;;
+  esac
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)

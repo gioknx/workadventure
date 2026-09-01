@@ -323,15 +323,7 @@ const server = createServer(async (req, res) => {
   if (req.method === "OPTIONS") return responder(204, {});
 
   if (req.method === "GET" && url.pathname === "/vip") {
-    try {
-      const semanaTeste = url.searchParams.get("semana");
-      const vip = semanaTeste
-        ? fecharSemana(semanaTeste, true)
-        : lerDadosJson("vip.json");
-      return responder(200, vip);
-    } catch (erro) {
-      return responder(400, { erro: erro.message });
-    }
+    return responder(200, lerDadosJson("vip.json"));
   }
 
   if (req.method === "POST" && url.pathname === "/vip/invasao") {
@@ -640,12 +632,12 @@ const server = createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname.startsWith("/pessoas/")) {
     try {
       const nome = decodeURIComponent(url.pathname.slice("/pessoas/".length));
-      const pessoa = lerDadosJson("pessoas.json")[nome];
-      if (!pessoa) return responder(404, { erro: "pessoa nao encontrada" });
+      const cadastro = acharPessoaDados(lerDadosJson("pessoas.json"), nome);
+      if (!cadastro) return responder(404, { erro: "pessoa nao encontrada" });
       return responder(200, {
-        uuid: pessoa.uuid,
-        squad: pessoa.squad,
-        tags: pessoa.tags ?? [],
+        uuid: cadastro.pessoa.uuid,
+        squad: cadastro.pessoa.squad,
+        tags: cadastro.pessoa.tags ?? [],
       });
     } catch (erro) {
       return responder(500, { erro: erro.message });
