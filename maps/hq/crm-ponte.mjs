@@ -1,12 +1,12 @@
 /**
  * Ponte do CRM — consumidor do barramento de eventos.
  *
- * Assina o SSE do barramento neutro, descarta repetido e atrasado, traduz o
- * vocabulario do CRM para o vocabulario do mundo e injeta pelo pusher
- * (POST /global/event), que entrega a todos os clientes da sala.
+ * Assina o SSE do barramento neutro, descarta repetido e atrasado, prefixa o
+ * nome do evento com "crm-" e injeta pelo pusher (POST /global/event), que
+ * entrega a todos os clientes da sala.
  *
- * Esta e a UNICA peca que conhece os dois vocabularios. O barramento nao sabe
- * o que e o WorkAdventure; o mundo nao sabe o que e o publi-tech.
+ * A ponte NAO decide reacao. Qual evento vira som, banner ou contador mora no
+ * catalogo do mundo (maps/hq/reacoes.json), lido por maps/hq/motor-reacoes.js.
  */
 
 import { createServer } from "node:http";
@@ -40,15 +40,9 @@ const EVENTOS = new Set([
 
 const SEVERIDADES = new Set(["info", "celebrate"]);
 
-// Tabela de traducao: matricula_view cai no WA.event.on("hq-venda") que o
-// sino-global.js ja escuta, sem mudar uma linha daquele arquivo.
-const TRADUCAO = {
-  matricula_view: (e) => ({ name: "hq-venda", data: {
-    ativador_nome: e.payload.actorLabel || "Candidata",
-    squad: e.payload.groupLabel || "CRM",
-    squad_cor: "#8A6D1D" } }),
-};
-const PADRAO = (e) => ({ name: "crm-" + e.event, data: {
+// Vocabulario unico: todo evento vira "crm-<event>". Qual deles vira som,
+// banner ou contador e decisao do catalogo do mundo, nao desta peca.
+const PARA_O_MUNDO = (e) => ({ name: "crm-" + e.event, data: {
   actorLabel: e.payload.actorLabel, groupLabel: e.payload.groupLabel,
   amount: e.payload.amount, severity: e.payload.severity, occurredAt: e.occurredAt } });
 
@@ -155,8 +149,7 @@ async function processar(evento) {
     return;
   }
 
-  const traduzir = TRADUCAO[evento.event] || PADRAO;
-  await injetar(traduzir(evento));
+  await injetar(PARA_O_MUNDO(evento));
 }
 
 function blocoParaEvento(bloco) {

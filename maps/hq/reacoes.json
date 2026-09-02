@@ -1,0 +1,86 @@
+{
+  "regras": [
+    {
+      "id": "venda-sino",
+      "quando": "crm-matricula_view",
+      "faz": [
+        { "acao": "som", "url": "sons/sino.mp3", "volume": 0.72 },
+        { "acao": "banner", "texto": "🔔 VENDA · {actorLabel|Candidata} · {groupLabel|CRM}", "cor": "#8A6D1D", "segundos": 8 },
+        { "acao": "contador", "chave": "hq_vendas_dia" }
+      ],
+      "silencio": 3000,
+      "teto_por_minuto": 6
+    },
+    {
+      "id": "primeiro-job",
+      "quando": "crm-first_job_approved",
+      "faz": [
+        { "acao": "banner", "texto": "⭐ PRIMEIRO JOB APROVADO · {actorLabel|Candidata}", "cor": "#8A6D1D", "segundos": 8 },
+        { "acao": "destaque", "cor": "#FFD700", "segundos": 60 }
+      ],
+      "silencio": 3000,
+      "teto_por_minuto": 6
+    },
+    {
+      "id": "job-recusado",
+      "quando": "crm-first_job_rejected",
+      "faz": [
+        { "acao": "mensagem", "texto": "job recusado · {actorLabel|Candidata}" }
+      ],
+      "silencio": 5000
+    },
+    {
+      "id": "onboarding-entrou",
+      "quando": "crm-onboarding_in_progress",
+      "faz": [
+        { "acao": "mensagem", "texto": "👋 nova candidata no onboarding · {actorLabel|Candidata}" }
+      ]
+    },
+    {
+      "id": "onboarding-fim",
+      "quando": "crm-onboarding_completed",
+      "faz": [
+        { "acao": "banner", "texto": "✅ onboarding concluído · {actorLabel|Candidata}", "cor": "#2E7D32", "segundos": 5 }
+      ],
+      "silencio": 3000
+    },
+    {
+      "id": "pre-task-fila",
+      "quando": "crm-pre_task_awaiting_review",
+      "faz": [
+        { "acao": "contador", "chave": "hq_fila_curadoria" },
+        { "acao": "mensagem", "texto": "📥 pré-task na fila de curadoria · {total} na fila" }
+      ]
+    },
+    {
+      "id": "funil-quiz-view",
+      "quando": "crm-quiz_view",
+      "faz": [{ "acao": "contador", "chave": "hq_funil_quiz_view" }]
+    },
+    {
+      "id": "funil-quiz-start",
+      "quando": "crm-quiz_start",
+      "faz": [{ "acao": "contador", "chave": "hq_funil_quiz_start" }]
+    },
+    {
+      "id": "funil-quiz-step",
+      "quando": "crm-quiz_step_answered",
+      "faz": [{ "acao": "contador", "chave": "hq_funil_quiz_step_answered" }]
+    },
+    {
+      "id": "funil-quiz-complete",
+      "quando": "crm-quiz_complete",
+      "faz": [{ "acao": "contador", "chave": "hq_funil_quiz_complete" }]
+    },
+    {
+      "id": "funil-resultado-view",
+      "quando": "crm-resultado_view",
+      "faz": [{ "acao": "contador", "chave": "hq_funil_resultado_view" }]
+    },
+    {
+      "id": "funil-resultado-cta",
+      "quando": "crm-resultado_cta_click",
+      "faz": [{ "acao": "contador", "chave": "hq_funil_resultado_cta_click" }]
+    }
+  ]
+}
