@@ -53,5 +53,16 @@ else
   fi
 fi
 
+echo "==> ponte do CRM"
+if curl -s -m 3 -o /dev/null http://localhost:8903/saude; then
+  echo "    ja estava de pe"
+else
+  nohup node --env-file=.env maps/hq/crm-ponte.mjs > /tmp/crm-ponte.log 2>&1 &
+  sleep 2
+  # A ponte e opcional: o barramento vive em outro repo e pode estar desligado.
+  curl -s -m 5 -o /dev/null http://localhost:8903/saude \
+    && echo "    subiu" || echo "    FALHOU: /tmp/crm-ponte.log"
+fi
+
 echo
 echo "HQ no ar: http://play.workadventure.test/_/global/maps.workadventure.test/hq/hq.tmj"
