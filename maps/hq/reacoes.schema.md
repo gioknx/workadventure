@@ -14,10 +14,10 @@ explicação mora aqui, e só aqui.
 {
   "id": "venda-sino",
   "quando": "crm-matricula_view",
-  "se": { "severity": "celebrate" },
+  "se": { "stage": "conversion" },
   "faz": [
     { "acao": "som", "url": "sons/sino.mp3", "volume": 0.72 },
-    { "acao": "banner", "texto": "🔔 VENDA · {actorLabel} · {groupLabel}", "segundos": 8 }
+    { "acao": "banner", "texto": "🔔 VENDA · {ownerLabel|equipe} · {productLabel}", "segundos": 8 }
   ],
   "silencio": 3000,
   "teto_por_minuto": 6

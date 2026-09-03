@@ -38,13 +38,22 @@ const EVENTOS = new Set([
   "first_job_rejected",
 ]);
 
-const SEVERIDADES = new Set(["info", "celebrate"]);
+// Estagio do negocio no funil. Substituiu a antiga `severity` (info/celebrate),
+// que era reacao vazando para o contrato do dado.
+const ESTAGIOS = new Set(["lead", "qualified", "onboarding", "conversion", "retained", "lost"]);
 
-// Vocabulario unico: todo evento vira "crm-<event>". Qual deles vira som,
-// banner ou contador e decisao do catalogo do mundo, nao desta peca.
+// Vocabulario unico: todo evento vira "crm-<event>", com o kit de venda inteiro.
+// Qual deles vira som, banner ou contador e decisao do catalogo do mundo.
 const PARA_O_MUNDO = (e) => ({ name: "crm-" + e.event, data: {
-  actorLabel: e.payload.actorLabel, groupLabel: e.payload.groupLabel,
-  amount: e.payload.amount, severity: e.payload.severity, occurredAt: e.occurredAt } });
+  actorLabel: e.payload.actorLabel,
+  groupLabel: e.payload.groupLabel,
+  ownerLabel: e.payload.ownerLabel,
+  dealId: e.payload.dealId,
+  amount: e.payload.amount,
+  currency: e.payload.currency,
+  productLabel: e.payload.productLabel,
+  stage: e.payload.stage,
+  occurredAt: e.occurredAt } });
 
 const metricas = {
   conectado: false,
@@ -92,13 +101,17 @@ function envelopeValido(evento) {
   const payload = evento.payload;
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
   const chavesPayload = Object.keys(payload);
-  if (chavesPayload.length !== 4) return false;
-  for (const chave of ["actorLabel", "groupLabel", "amount", "severity"]) {
+  const ESPERADAS = ["actorLabel", "groupLabel", "ownerLabel", "dealId",
+    "amount", "currency", "productLabel", "stage"];
+  if (chavesPayload.length !== ESPERADAS.length) return false;
+  for (const chave of ESPERADAS) {
     if (!chavesPayload.includes(chave)) return false;
   }
   if (!rotuloNulo(payload.actorLabel) || !rotuloNulo(payload.groupLabel)) return false;
+  if (!rotuloNulo(payload.ownerLabel) || !rotuloNulo(payload.productLabel)) return false;
+  if (!rotuloNulo(payload.dealId) || !rotuloNulo(payload.currency)) return false;
   if (payload.amount !== null && typeof payload.amount !== "number") return false;
-  if (!SEVERIDADES.has(payload.severity)) return false;
+  if (!ESTAGIOS.has(payload.stage)) return false;
   return true;
 }
 

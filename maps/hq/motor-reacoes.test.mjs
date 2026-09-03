@@ -138,9 +138,14 @@ async function montar(catalogo) {
 test("venda: 1 som, 1 banner interpolado e contador incrementado", async () => {
   const m = await montar(CATALOGO_REAL);
   m.emitir("crm-matricula_view", {
-    actorLabel: "Ana",
-    groupLabel: "Squad Alfa",
-    severity: "celebrate",
+    actorLabel: null,
+    groupLabel: null,
+    ownerLabel: "Marina",
+    dealId: "deal_8831",
+    amount: 1970,
+    currency: "BRL",
+    productLabel: "Trilha Publi",
+    stage: "conversion",
   });
   await esperar(30);
 
@@ -148,29 +153,28 @@ test("venda: 1 som, 1 banner interpolado e contador incrementado", async () => {
   assert.equal(m.registro.som[0].url, "sons/sino.mp3");
   assert.equal(m.registro.som[0].volume, 0.72);
   assert.equal(m.registro.banner.length, 1);
-  assert.match(m.registro.banner[0].text, /Ana/);
-  assert.match(m.registro.banner[0].text, /Squad Alfa/);
+  assert.equal(m.registro.banner[0].text, "🔔 VENDA · Marina · Trilha Publi");
   assert.equal(m.registro.variaveis.hq_vendas_dia, 1);
 });
 
-test("rotulo ausente: actorLabel null cai no padrao do catalogo", async () => {
+test("vendedor ausente: ownerLabel null cai no padrao do catalogo", async () => {
   const m = await montar(CATALOGO_REAL);
   m.emitir("crm-matricula_view", {
-    actorLabel: null,
-    groupLabel: null,
-    severity: "celebrate",
+    ownerLabel: null,
+    productLabel: null,
+    stage: "conversion",
   });
   await esperar(30);
 
   assert.equal(m.registro.banner.length, 1);
-  assert.equal(m.registro.banner[0].text, "🔔 VENDA · Candidata · CRM");
+  assert.equal(m.registro.banner[0].text, "🔔 VENDA · equipe · matrícula");
 });
 
 test("silencio: segundo disparo em 100 ms e descartado", async () => {
   const m = await montar(CATALOGO_REAL);
-  m.emitir("crm-matricula_view", { actorLabel: "Ana", severity: "celebrate" });
+  m.emitir("crm-matricula_view", { actorLabel: "Ana", stage: "conversion" });
   await esperar(20);
-  m.emitir("crm-matricula_view", { actorLabel: "Ana", severity: "celebrate" });
+  m.emitir("crm-matricula_view", { actorLabel: "Ana", stage: "conversion" });
   await esperar(30);
 
   assert.equal(m.registro.som.length, 1, "tocou som dentro da janela de silencio");
@@ -180,7 +184,7 @@ test("silencio: segundo disparo em 100 ms e descartado", async () => {
 
 test("alto volume: 30 quiz_step_answered nao produzem som nem banner", async () => {
   const m = await montar(CATALOGO_REAL);
-  for (let i = 0; i < 30; i += 1) m.emitir("crm-quiz_step_answered", { severity: "info" });
+  for (let i = 0; i < 30; i += 1) m.emitir("crm-quiz_step_answered", { stage: "lead" });
   await esperar(60);
 
   assert.equal(m.registro.som.length, 0);
@@ -197,7 +201,7 @@ test("teto global corta a soma de regras distintas em 20 por minuto", async () =
     "crm-quiz_complete",
     "crm-resultado_view",
   ];
-  for (let i = 0; i < 8; i += 1) eventos.forEach((e) => m.emitir(e, { severity: "info" }));
+  for (let i = 0; i < 8; i += 1) eventos.forEach((e) => m.emitir(e, { stage: "lead" }));
   await esperar(80);
 
   assert.equal(m.estado.disparos, 20, `teto global nao cortou: ${m.estado.disparos}`);
@@ -238,18 +242,18 @@ test("id repetido: recusa o catalogo inteiro e nao assina nada", async () => {
   assert.ok(m.registro.logs.some((l) => l.includes("id repetido: a")));
 });
 
-test("se: severity info nao casa com regra que exige celebrate", async () => {
+test("se: stage lead nao casa com regra que exige conversion", async () => {
   const m = await montar({
     regras: [
       {
-        id: "so-celebra",
+        id: "so-conversao",
         quando: "crm-matricula_view",
-        se: { severity: "celebrate" },
+        se: { stage: "conversion" },
         faz: [{ acao: "mensagem", texto: "oi" }],
       },
     ],
   });
-  m.emitir("crm-matricula_view", { severity: "info" });
+  m.emitir("crm-matricula_view", { stage: "lead" });
   await esperar(30);
 
   assert.equal(m.estado.disparos, 0);

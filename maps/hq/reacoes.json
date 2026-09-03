@@ -5,7 +5,7 @@
       "quando": "crm-matricula_view",
       "faz": [
         { "acao": "som", "url": "sons/sino.mp3", "volume": 0.72 },
-        { "acao": "banner", "texto": "🔔 VENDA · {actorLabel|Candidata} · {groupLabel|CRM}", "cor": "#8A6D1D", "segundos": 8 },
+        { "acao": "banner", "texto": "🔔 VENDA · {ownerLabel|equipe} · {productLabel|matrícula}", "cor": "#8A6D1D", "segundos": 8 },
         { "acao": "contador", "chave": "hq_vendas_dia" }
       ],
       "silencio": 3000,
