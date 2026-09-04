@@ -19,6 +19,9 @@ import { ProtobufClientUtils } from "../../Network/ProtobufClientUtils";
 import { WOKA_SPEED } from "../../Enum/EnvironmentVariable";
 
 import { UsernameDisplay } from "../Components/UsernameDisplay";
+import { RoleBadgeDisplay } from "../Player/RoleBadgeDisplay";
+import { findRole } from "../Player/RoleCatalog";
+import { subscribeToRoleTags } from "../Player/RoleTagsResolver";
 import { lazyLoadPlayerCharacterTextures } from "./PlayerTexturesLoadingManager";
 import { SpeechBubble } from "./SpeechBubble";
 import { SpeechDomElement } from "./SpeechDomElement";
@@ -50,6 +53,9 @@ export abstract class Character extends Container implements OutlineableInterfac
 
     private bubble: RenderTexture | null | DOMElement = null;
     private usernameDisplay: UsernameDisplay | undefined;
+    private roleBadge: RoleBadgeDisplay | undefined;
+    private roleBadgeTag: string | undefined;
+    private roleTagsUnsubscribe: Unsubscriber | undefined;
     private availabilityStatus: AvailabilityStatusType = AvailabilityStatus.ONLINE;
     public readonly playerName: string;
     public sprites: Map<string, Sprite>;
@@ -186,6 +192,7 @@ export abstract class Character extends Container implements OutlineableInterfac
                 playerNameOutlineColor,
             );
             this.usernameDisplay.setAvailabilityStatus(this.availabilityStatus, true, true);
+            this.applyRoleTags(userId);
             this.usernameDisplay.setPlayerDepth(this.depth);
 
             this.outlineColorStoreUnsubscribe = this.outlineColorStore.subscribe((color) => {
@@ -252,6 +259,7 @@ export abstract class Character extends Container implements OutlineableInterfac
         if (this.depth !== depth) {
             this.setDepth(depth);
             this.usernameDisplay?.setPlayerDepth(depth);
+            this.roleBadge?.setPlayerDepth(depth);
         }
     }
 
@@ -393,12 +401,54 @@ export abstract class Character extends Container implements OutlineableInterfac
 
     protected updateUsernameDisplayPosition(x = this.x, y = this.y): void {
         this.usernameDisplay?.setPosition(x, y + playerNameY);
+        this.roleBadge?.setPosition(x, y + playerNameY);
+    }
+
+    /**
+     * Subscribes to the role tags of this character and keeps the badge under the name in sync.
+     *
+     * The tags of the local player are already on the room connection; the tags of a remote player
+     * only exist in the world space, so they are looked up there by name. No known role tag means no
+     * badge at all, which leaves the Woka with the display it has without this feature.
+     */
+    private applyRoleTags(userId: string | null | undefined): void {
+        if (userId != undefined) {
+            let tags: string[] = [];
+            try {
+                tags = this.scene.connection?.getAllTags() ?? [];
+            } catch {
+                // getAllTags() throws until the room is initialized; the local player then has no role.
+            }
+            this.updateRoleBadge(tags);
+            return;
+        }
+
+        this.roleTagsUnsubscribe = subscribeToRoleTags(this.scene, this.playerName, (tags) => {
+            this.updateRoleBadge(tags);
+            this.scene.markDirty();
+        });
+    }
+
+    private updateRoleBadge(tags: string[]): void {
+        const role = findRole(tags);
+        if (role?.tag === this.roleBadgeTag) {
+            return;
+        }
+        this.roleBadgeTag = role?.tag;
+        this.roleBadge?.destroy();
+        this.roleBadge = undefined;
+        if (!role) {
+            return;
+        }
+        this.roleBadge = new RoleBadgeDisplay(this.scene, this.x, this.y + playerNameY, role);
+        this.roleBadge.setPlayerDepth(this.depth);
     }
 
     setPosition(x: number, y: number): this {
         super.setPosition(Math.round(x), Math.round(y));
         this.setDepth(this.y + 16);
         this.usernameDisplay?.setPlayerDepth(this.depth);
+        this.roleBadge?.setPlayerDepth(this.depth);
         this.updateUsernameDisplayPosition();
         this.movedSubject?.next({ x: this.x, y: this.y });
         return this;
@@ -565,6 +615,8 @@ export abstract class Character extends Container implements OutlineableInterfac
 
     destroy(): void {
         this.usernameDisplay?.destroy();
+        this.roleBadge?.destroy();
+        this.roleTagsUnsubscribe?.();
         if (this.scene) {
             this.scene.events.off(Phaser.Scenes.Events.POST_UPDATE, this.syncDisplayPositionWithPhysics);
             for (const sprite of this.sprites.values()) {
