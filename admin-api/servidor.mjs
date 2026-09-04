@@ -203,6 +203,27 @@ async function dispararSinoGlobal(nome, squadId) {
   }
 }
 
+// Membros creditaveis de um squad, em ordem estavel (ordem de pessoas.json).
+// Quem esta no squad mas ainda nao vinculou uuid nao entra: o saldo da loja e'
+// indexado por `pessoa:<uuid>`, entao sem uuid nao ha onde creditar.
+function membrosDoSquad(pessoas, squadId) {
+  return Object.entries(pessoas)
+    .filter(([, pessoa]) => pessoa.squad === squadId && pessoa.uuid)
+    .map(([nome, pessoa]) => ({ nome, uuid: String(pessoa.uuid) }));
+}
+
+// Reparte um total inteiro entre n partes sem criar nem perder ponto: cada um
+// leva o piso e o resto vai de 1 em 1 aos primeiros da ordem estavel.
+// Invariante: soma(repartirPontos(total, n)) === total.
+function repartirPontos(total, n) {
+  if (!Number.isInteger(total) || !Number.isInteger(n) || n <= 0) {
+    throw new Error("reparticao exige total inteiro e n positivo");
+  }
+  const piso = Math.trunc(total / n);
+  const resto = total - piso * n;
+  return Array.from({ length: n }, (_, indice) => piso + (indice < resto ? 1 : 0));
+}
+
 function montarPlacar(saldos, semana = null) {
   const squads = lerDadosJson("squads.json");
   const pessoas = lerDadosJson("pessoas.json");
@@ -566,10 +587,16 @@ const server = createServer(async (req, res) => {
       console.error("[webhook/venda] timestamp_fora_da_janela");
       return responder(401, { erro: "timestamp fora da janela de 5 minutos" });
     }
-    const camposValidos = ["event_id", "order_id", "ativador"].every(
+    const camposValidos = ["event_id", "order_id"].every(
       (campo) => typeof venda[campo] === "string" && venda[campo].trim(),
     );
-    if (!camposValidos || typeof venda.timestamp !== "string") {
+    const ativador =
+      typeof venda.ativador === "string" && venda.ativador.trim() ? venda.ativador : null;
+    // Venda nascida do gatilho do CRM nao carrega vendedor: `funnel_events` nao
+    // tem coluna de pessoa (so atribuicao de campanha), entao o `grupo` credita
+    // SO o squad em vez de a venda inteira ser recusada.
+    const grupo = typeof venda.grupo === "string" && venda.grupo.trim() ? venda.grupo : null;
+    if (!camposValidos || (!ativador && !grupo) || typeof venda.timestamp !== "string") {
       console.error("[webhook/venda] schema_incompleto");
       return responder(400, { erro: "schema incompleto" });
     }
@@ -578,13 +605,22 @@ const server = createServer(async (req, res) => {
       return responder(200, { status: "duplicado" });
     }
 
-    let cadastro;
+    let cadastro = null;
+    let squadId = null;
     try {
-      cadastro = acharPessoaDados(lerDadosJson("pessoas.json"), venda.ativador);
+      const squads = lerDadosJson("squads.json");
+      if (ativador) {
+        cadastro = acharPessoaDados(lerDadosJson("pessoas.json"), ativador);
+        squadId = cadastro?.pessoa?.squad ?? null;
+      } else {
+        const mapa = lerDadosJson("atribuicao-squads.json");
+        squadId = mapa[grupo] ?? mapa["*"] ?? null;
+      }
+      if (squadId && !squads[squadId]) squadId = null;
     } catch (erro) {
       return responder(500, { erro: erro.message });
     }
-    if (!cadastro?.pessoa?.squad) {
+    if (!squadId) {
       appendFileSync(
         CAMINHO_ORFAS,
         `${JSON.stringify({ ...venda, recebido_em: new Date().toISOString() })}\n`,
@@ -596,8 +632,9 @@ const server = createServer(async (req, res) => {
     try {
       const config = lerDadosJson("config-pontos.json");
       const semana = semanaISO(venda.timestamp);
-      const lancamentos = [
-        {
+      const lancamentos = [];
+      if (cadastro?.pessoa?.uuid) {
+        lancamentos.push({
           entry_id: randomUUID(),
           event_id: venda.event_id,
           tipo: "credito",
@@ -606,25 +643,53 @@ const server = createServer(async (req, res) => {
           motivo: "venda",
           semana,
           ts: venda.timestamp,
-        },
-        {
-          entry_id: randomUUID(),
-          event_id: venda.event_id,
-          tipo: "credito",
-          sujeito: `squad:${cadastro.pessoa.squad}`,
-          delta: config.pontos_squad,
-          motivo: "venda",
-          semana,
-          ts: venda.timestamp,
-        },
-      ];
+        });
+      }
+      lancamentos.push({
+        entry_id: randomUUID(),
+        event_id: venda.event_id,
+        tipo: "credito",
+        sujeito: `squad:${squadId}`,
+        delta: config.pontos_squad,
+        motivo: "venda",
+        semana,
+        ts: venda.timestamp,
+      });
+      // Venda sem vendedor (so grupo): o squad divide entre os seus. A linha de
+      // squad continua inteira porque e' ela que o placar le; as linhas de
+      // pessoa somam EXATAMENTE pontos_squad (10 divididos por N), nunca 10 para
+      // cada — senao a moeda da loja inflaria N vezes por venda.
+      if (!cadastro) {
+        const membros = membrosDoSquad(lerDadosJson("pessoas.json"), squadId);
+        if (!membros.length) {
+          console.log(
+            `[webhook/venda] squad_sem_membros ${squadId} ${venda.event_id}: so linha de squad`,
+          );
+        }
+        const fatias = membros.length ? repartirPontos(config.pontos_squad, membros.length) : [];
+        membros.forEach((membro, indice) => {
+          lancamentos.push({
+            entry_id: randomUUID(),
+            event_id: venda.event_id,
+            tipo: "credito",
+            sujeito: `pessoa:${membro.uuid}`,
+            delta: fatias[indice],
+            motivo: "venda",
+            origem: "divisao_squad",
+            squad: squadId,
+            semana,
+            ts: venda.timestamp,
+          });
+        });
+      }
       if (lancamentos.some((item) => !Number.isFinite(item.delta))) {
         throw new Error("config-pontos.json contem valor invalido");
       }
       registrarLancamentos(lancamentos);
       let sino = "disparado";
       try {
-        await dispararSinoGlobal(cadastro.nome, cadastro.pessoa.squad);
+        const squads = lerDadosJson("squads.json");
+        await dispararSinoGlobal(cadastro?.nome ?? squads[squadId].nome, squadId);
       } catch (erro) {
         sino = "falhou";
         console.error(`[webhook/venda] sino_falhou ${venda.event_id}:`, erro.message);
