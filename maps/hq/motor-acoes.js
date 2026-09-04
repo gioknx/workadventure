@@ -66,6 +66,34 @@
       return p.visivel ? WA.room.showLayer(p.nome) : WA.room.hideLayer(p.nome);
     },
 
+    // Faixas do MESMO grupo de camadas: mostra a da faixa em que o valor cai e
+    // esconde as outras. Nao ha operador no catalogo — os cortes sao dados:
+    // faixas = [{ate:0,camada:null},{ate:10,camada:"x"},{camada:"y"}] (ultima = resto).
+    camada_faixa: function (p) {
+      var faixas = Array.isArray(p.faixas) ? p.faixas : [];
+      var valor = Number(p.valor);
+      if (!isFinite(valor)) valor = 0;
+      var escolhida = null;
+      for (var i = 0; i < faixas.length; i += 1) {
+        var ate = faixas[i].ate;
+        if (typeof ate !== "number" || valor <= ate) {
+          escolhida = faixas[i].camada || null;
+          break;
+        }
+      }
+      console.info(
+        "[motor] camada_faixa valor=" + valor + " showLayer " + (escolhida || "nenhuma")
+      );
+      return Promise.all(
+        faixas.map(function (faixa) {
+          if (!faixa.camada) return null;
+          return faixa.camada === escolhida
+            ? WA.room.showLayer(faixa.camada)
+            : WA.room.hideLayer(faixa.camada);
+        })
+      );
+    },
+
     camada_piscar: function (p) {
       var vezes = num(p.vezes, 3);
       var intervalo = num(p.intervalo, 400);
@@ -112,12 +140,16 @@
     contador: function (p, ctx) {
       var chave = p.chave;
       var passo = num(p.passo, 1);
+      var minimo = typeof p.minimo === "number" ? p.minimo : null;
+      function limitar(valor) {
+        return minimo !== null && valor < minimo ? minimo : valor;
+      }
       return Promise.resolve()
         .then(function () {
           return WA.state.loadVariable(chave);
         })
         .then(function (atual) {
-          var total = (Number(atual) || 0) + passo;
+          var total = limitar((Number(atual) || 0) + passo);
           return Promise.resolve(WA.state.saveVariable(chave, total)).then(function () {
             ctx.dados.total = total;
             return total;
@@ -125,7 +157,7 @@
         })
         .catch(function () {
           // Variavel nao declarada no .tmj: cai para contagem local do cliente.
-          ctx.contadorLocal[chave] = (ctx.contadorLocal[chave] || 0) + passo;
+          ctx.contadorLocal[chave] = limitar((ctx.contadorLocal[chave] || 0) + passo);
           ctx.dados.total = ctx.contadorLocal[chave];
           console.info("[motor] contador local " + chave + " = " + ctx.contadorLocal[chave]);
           return ctx.contadorLocal[chave];

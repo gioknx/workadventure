@@ -62,6 +62,20 @@ function acharPessoaDados(pessoas, identificador) {
   }
 }
 
+// Identidade forte e' o uuid do jogador; o nome so serve para exibir e para o
+// primeiro vinculo. Quem manda um uuid ja conhecido vence o nome enviado.
+function resolverPessoa(pessoas, { uuid, nome }) {
+  if (uuid) {
+    const alvo = String(uuid).trim().toLowerCase();
+    for (const [chave, pessoa] of Object.entries(pessoas)) {
+      if (pessoa.uuid && String(pessoa.uuid).toLowerCase() === alvo) {
+        return { nome: chave, pessoa };
+      }
+    }
+  }
+  return acharPessoaDados(pessoas, nome) ?? null;
+}
+
 async function lerCorpoBruto(req) {
   const partes = [];
   let tamanho = 0;
@@ -262,18 +276,87 @@ function fecharSemana(semana, forcar = false) {
   return proximo;
 }
 
+// Pecas abertas da casa: aparecem para todo mundo, sem resgate por pontos.
+// Cada peca declara a camada do Woka em que entra (ordem em PlayerTextures.ts).
+const PECAS_HQ = [
+  {
+    parte: "hat",
+    id: "hq-boina",
+    name: "Boina HQ",
+    url: "http://maps.workadventure.test/hq/wokas/hq-boina.png",
+  },
+  {
+    parte: "clothes",
+    id: "hq-camiseta",
+    name: "Camiseta HQ",
+    url: "http://maps.workadventure.test/hq/wokas/hq-camiseta.png",
+  },
+  {
+    parte: "accessory",
+    id: "hq-cracha",
+    name: "Cracha HQ",
+    url: "http://maps.workadventure.test/hq/wokas/hq-cracha.png",
+  },
+];
+
+// Catalogo unico da loja: skins (roupa) e companions (bicho) vivem em arquivos
+// separados porque so a skin entra na lista de Woka; o tipo viaja junto no item.
+function catalogoDaLoja() {
+  return [
+    ...lerDadosJson("catalogo-skins.json").map((item) => ({ ...item, tipo: "skin" })),
+    ...lerDadosJson("catalogo-companions.json").map((item) => ({ ...item, tipo: "companion" })),
+  ];
+}
+
+function inventarioDe(cadastro, tipo) {
+  const inventario = lerDadosJson("inventario.json");
+  const itens = cadastro ? inventario[cadastro.pessoa.uuid] ?? [] : [];
+  return new Set(itens.filter((item) => item.tipo === tipo).map((item) => item.item_id));
+}
+
 function listaWokaPara(cadastro) {
   const base = JSON.parse(readFileSync(CAMINHO_WOKA_BASE, "utf8"));
-  const inventario = lerDadosJson("inventario.json");
-  const resgatadas = new Set(
-    (cadastro ? inventario[cadastro.pessoa.uuid] ?? [] : []).map((item) => item.skin_id),
-  );
+  const resgatadas = inventarioDe(cadastro, "skin");
   const chiques = lerDadosJson("catalogo-skins.json")
     .filter((skin) => resgatadas.has(skin.id))
     .map((skin) => ({ id: skin.id, name: skin.nome, url: skin.textura }));
   base.woka ??= { collections: [] };
   base.woka.collections.push({ name: "Chiques", textures: chiques });
+  for (const peca of PECAS_HQ) {
+    base[peca.parte] ??= { collections: [] };
+    base[peca.parte].collections ??= [];
+    let colecao = base[peca.parte].collections.find((item) => item.name === "HQ");
+    if (!colecao) {
+      colecao = { name: "HQ", textures: [] };
+      base[peca.parte].collections.push(colecao);
+    }
+    colecao.textures.push({ id: peca.id, name: peca.name, url: peca.url });
+  }
   return base;
+}
+
+// Bichos de estimacao: so aparecem no seletor de companion de quem resgatou.
+function listaCompanionPara(cadastro) {
+  const resgatados = inventarioDe(cadastro, "companion");
+  const texturas = lerDadosJson("catalogo-companions.json")
+    .filter((bicho) => resgatados.has(bicho.id))
+    .map((bicho) => ({
+      id: bicho.id,
+      name: bicho.nome,
+      url: bicho.textura,
+      ...(bicho.behavior ? { behavior: bicho.behavior } : {}),
+    }));
+  if (texturas.length === 0) return [];
+  return [{ name: "Bichos do HQ", position: 0, textures: texturas }];
+}
+
+function companionPermitido(cadastro, id) {
+  if (!id) return null;
+  for (const colecao of listaCompanionPara(cadastro)) {
+    const achado = colecao.textures.find((textura) => textura.id === id);
+    if (achado) return { id: achado.id, url: achado.url };
+  }
+  return null;
 }
 
 function mapaTexturasPermitidas(cadastro) {
@@ -369,9 +452,10 @@ const server = createServer(async (req, res) => {
     }
   }
 
-  if (req.method === "GET" && url.pathname === "/catalogo-skins") {
+  // Vitrine da loja: skin (roupa) e companion (bicho) no mesmo corpo, com tipo.
+  if (req.method === "GET" && url.pathname === "/catalogo") {
     try {
-      return responder(200, lerDadosJson("catalogo-skins.json"));
+      return responder(200, catalogoDaLoja());
     } catch (erro) {
       return responder(500, { erro: erro.message });
     }
@@ -380,7 +464,10 @@ const server = createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname.startsWith("/saldo/")) {
     try {
       const nome = decodeURIComponent(url.pathname.slice("/saldo/".length));
-      const cadastro = acharPessoaDados(lerDadosJson("pessoas.json"), nome);
+      const cadastro = resolverPessoa(lerDadosJson("pessoas.json"), {
+        uuid: url.searchParams.get("uuid"),
+        nome,
+      });
       if (!cadastro) return responder(404, { erro: "pessoa nao encontrada" });
       const inventario = lerDadosJson("inventario.json");
       return responder(200, {
@@ -397,53 +484,54 @@ const server = createServer(async (req, res) => {
   if (req.method === "POST" && url.pathname === "/resgate") {
     try {
       const pedido = await lerCorpoJson(req);
-      const cadastro = acharPessoaDados(lerDadosJson("pessoas.json"), pedido.nome);
+      const cadastro = resolverPessoa(lerDadosJson("pessoas.json"), pedido);
       if (!cadastro) return responder(404, { erro: "pessoa nao encontrada" });
-      const catalogo = lerDadosJson("catalogo-skins.json");
-      const skin = catalogo.find((item) => item.id === pedido.skin_id);
-      if (!skin) return responder(404, { erro: "skin nao encontrada" });
+      const alvo = catalogoDaLoja().find((item) => item.id === pedido.item_id);
+      if (!alvo) return responder(404, { erro: "item nao encontrado" });
       const inventario = lerDadosJson("inventario.json");
       const itens = Array.isArray(inventario[cadastro.pessoa.uuid])
         ? inventario[cadastro.pessoa.uuid]
         : [];
-      const existente = itens.find((item) => item.skin_id === skin.id);
+      const existente = itens.find((item) => item.item_id === alvo.id);
       const saldo = estadoPontos.saldos[`pessoa:${cadastro.pessoa.uuid}`] ?? 0;
       if (existente) {
         return responder(200, {
-          status: "ja_resgatada",
-          skin_id: skin.id,
+          status: "ja_resgatado",
+          item_id: alvo.id,
+          tipo: alvo.tipo,
           pontos: saldo,
           granted_from: existente.granted_from,
         });
       }
-      if (saldo < skin.preco_pontos) {
+      if (saldo < alvo.preco_pontos) {
         return responder(409, {
           erro: "pontos insuficientes",
           pontos: saldo,
-          necessario: skin.preco_pontos,
+          necessario: alvo.preco_pontos,
         });
       }
       const agora = new Date().toISOString();
       const lancamento = {
         entry_id: randomUUID(),
-        event_id: `resgate:${cadastro.pessoa.uuid}:${skin.id}:${randomUUID()}`,
+        event_id: `resgate:${cadastro.pessoa.uuid}:${alvo.id}:${randomUUID()}`,
         tipo: "debito",
         sujeito: `pessoa:${cadastro.pessoa.uuid}`,
-        delta: -skin.preco_pontos,
-        motivo: "resgate_skin",
-        skin_id: skin.id,
+        delta: -alvo.preco_pontos,
+        motivo: `resgate_${alvo.tipo}`,
+        item_id: alvo.id,
         semana: semanaISO(agora),
         ts: agora,
       };
       registrarLancamentos([lancamento]);
-      itens.push({ skin_id: skin.id, granted_from: lancamento.entry_id });
+      itens.push({ item_id: alvo.id, tipo: alvo.tipo, granted_from: lancamento.entry_id });
       inventario[cadastro.pessoa.uuid] = itens;
       gravarDadosJson("inventario.json", inventario);
-      console.log(`[resgate] ${cadastro.nome} resgatou ${skin.id} por ${skin.preco_pontos}`);
+      console.log(`[resgate] ${cadastro.nome} resgatou ${alvo.id} por ${alvo.preco_pontos}`);
       return responder(201, {
-        status: "resgatada",
-        skin_id: skin.id,
-        pontos: saldo - skin.preco_pontos,
+        status: "resgatado",
+        item_id: alvo.id,
+        tipo: alvo.tipo,
+        pontos: saldo - alvo.preco_pontos,
         granted_from: lancamento.entry_id,
       });
     } catch (erro) {
@@ -629,6 +717,82 @@ const server = createServer(async (req, res) => {
     }
   }
 
+  // A porta do HQ pergunta: essa identidade pode pisar na Diretoria?
+  if (req.method === "GET" && url.pathname === "/api/diretoria/acesso") {
+    try {
+      const nome = url.searchParams.get("nome");
+      const modo = lerDadosJson("config-diretoria.json").modo;
+      if (modo === "aberta") return responder(200, { acesso: true, motivo: "diretoria aberta" });
+      const cadastro = acharPessoaDados(lerDadosJson("pessoas.json"), nome);
+      if (cadastro?.pessoa?.tags?.includes("diretoria")) {
+        return responder(200, { acesso: true, motivo: "tag diretoria" });
+      }
+      return responder(403, { acesso: false, motivo: "sem tag diretoria" });
+    } catch (erro) {
+      return responder(500, { erro: erro.message });
+    }
+  }
+
+  // A sala VIP pergunta: esse uuid pode entrar? Quem decide e' o servidor.
+  if (req.method === "GET" && url.pathname === "/api/vip/acesso") {
+    try {
+      const vip = lerDadosJson("vip.json");
+      const cadastro = resolverPessoa(lerDadosJson("pessoas.json"), {
+        uuid: url.searchParams.get("uuid"),
+        nome: url.searchParams.get("nome"),
+      });
+      if (vip.squad_vencedor && cadastro?.pessoa?.squad === vip.squad_vencedor) {
+        return responder(200, {
+          acesso: true,
+          motivo: `squad ${vip.squad_vencedor} venceu a semana`,
+          squad_vencedor: vip.squad_vencedor,
+        });
+      }
+      return responder(403, {
+        acesso: false,
+        motivo: vip.squad_vencedor
+          ? `sala reservada ao squad ${vip.squad_vencedor}`
+          : "nenhum squad venceu a semana ainda",
+        squad_vencedor: vip.squad_vencedor ?? null,
+      });
+    } catch (erro) {
+      return responder(500, { erro: erro.message });
+    }
+  }
+
+  // Primeiro login casa o nome do cadastro com o uuid do jogador.
+  // uuid null em pessoas.json = ainda nao vinculado; substitui o marcador de
+  // pendencia de identidade que vivia no cadastro (removido em 04/09/2026).
+  if (req.method === "POST" && url.pathname === "/api/pessoas/vincular") {
+    try {
+      const pedido = await lerCorpoJson(req);
+      const nome = String(pedido.nome ?? "").trim();
+      const uuid = String(pedido.uuid ?? "").trim();
+      if (!nome || !uuid) return responder(400, { erro: "nome e uuid sao obrigatorios" });
+      const pessoas = lerDadosJson("pessoas.json");
+      const cadastro = acharPessoaDados(pessoas, nome);
+      if (!cadastro) return responder(404, { erro: "pessoa nao encontrada" });
+      if (cadastro.pessoa.uuid) {
+        if (cadastro.pessoa.uuid === uuid) {
+          return responder(200, { status: "ja_vinculado", nome: cadastro.nome, uuid });
+        }
+        console.error(`[vincular] ${cadastro.nome} ja tem outro uuid`);
+        return responder(409, { erro: "pessoa ja vinculada a outro uuid", nome: cadastro.nome });
+      }
+      const dono = resolverPessoa(pessoas, { uuid });
+      if (dono) {
+        console.error(`[vincular] uuid ja pertence a ${dono.nome}`);
+        return responder(409, { erro: "uuid ja pertence a outra pessoa", nome: dono.nome });
+      }
+      pessoas[cadastro.nome] = { ...cadastro.pessoa, uuid };
+      gravarDadosJson("pessoas.json", pessoas);
+      console.log(`[vincular] ${cadastro.nome} -> ${uuid}`);
+      return responder(201, { status: "vinculado", nome: cadastro.nome, uuid });
+    } catch (erro) {
+      return responder(400, { erro: erro.message });
+    }
+  }
+
   if (req.method === "GET" && url.pathname.startsWith("/pessoas/")) {
     try {
       const nome = decodeURIComponent(url.pathname.slice("/pessoas/".length));
@@ -682,7 +846,19 @@ const server = createServer(async (req, res) => {
       return responder(500, { erro: erro.message });
     }
   }
-  if (url.pathname === "/api/companion/list") return responder(200, []);
+
+  // Bichos: o seletor de companion so mostra o que a pessoa resgatou na loja.
+  if (req.method === "GET" && url.pathname === "/api/companion/list") {
+    try {
+      const cadastro = resolverPessoa(lerDadosJson("pessoas.json"), {
+        uuid: url.searchParams.get("uuid"),
+        nome: url.searchParams.get("uuid"),
+      });
+      return responder(200, listaCompanionPara(cadastro));
+    } catch (erro) {
+      return responder(500, { erro: erro.message });
+    }
+  }
 
   // Dados do mapa pedido
   if (url.pathname === "/api/map") {
@@ -763,6 +939,9 @@ const server = createServer(async (req, res) => {
       .filter(Boolean);
     const texturasValidas =
       texturasPedidas.length > 0 && characterTextures.length === texturasPedidas.length;
+    // O bicho pedido so vale se estiver no inventario de quem pediu.
+    const companionPedido = url.searchParams.get("companionTextureId");
+    const companionTexture = companionPermitido(cadastro, companionPedido);
     const corpo = {
       status: "ok",
       email: identificador ?? null,
@@ -771,8 +950,8 @@ const server = createServer(async (req, res) => {
       visitCardUrl: null,
       isCharacterTexturesValid: texturasValidas,
       characterTextures,
-      isCompanionTextureValid: true,
-      companionTexture: null,
+      isCompanionTextureValid: !companionPedido || companionTexture !== null,
+      companionTexture,
       messages: [],
       activatedInviteUser: true,
       canEdit: tags.includes("admin"),
@@ -799,13 +978,16 @@ const server = createServer(async (req, res) => {
       "/pessoas/:nome",
       "/squads",
       "/diretoria/modo",
+      "/api/diretoria/acesso",
+      "/api/vip/acesso",
+      "/api/pessoas/vincular",
       "/webhook/venda",
       "/webhook/estorno",
       "/placar/semana",
       "/placar/geral",
       "/vip",
       "/vip/invasao",
-      "/catalogo-skins",
+      "/catalogo",
       "/saldo/:nome",
       "/resgate",
       "/api/room/access",

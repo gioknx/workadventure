@@ -60,10 +60,11 @@ regra**.
 | `modal` | `titulo`, `url`, `posicao` (`right`) | `WA.ui.modal.openModal` |
 | `camada` | `nome`, `visivel` (bool) | `WA.room.showLayer` / `hideLayer` |
 | `camada_piscar` | `nome`, `vezes` (3), `intervalo` (400) | alterna show/hide, termina escondida |
+| `camada_faixa` | `valor` (string interpolável, ex. `{total}`), `faixas`: `[{ate, camada}]` | mostra a camada da faixa em que o valor cai e esconde as irmãs, via `WA.room.showLayer`/`hideLayer` |
 | `tiles` | `lista`: `[{x,y,tile,layer}]` | `WA.room.setTiles` |
 | `propriedade` | `camada`, `nome`, `valor` | `WA.room.setProperty` |
 | `destaque` | `cor` hex (`#FFD700`), `segundos` (60) | `WA.player.setOutlineColor` + `removeOutlineColor` no fim |
-| `contador` | `chave`, `passo` (1) | `WA.state.loadVariable` + `saveVariable`; expõe `{total}` |
+| `contador` | `chave`, `passo` (1), `minimo` (nenhum) | `WA.state.loadVariable` + `saveVariable`; expõe `{total}`. `passo` negativo decrementa; `minimo` trava o piso |
 | `site` | `url`, `largura` (40) | `WA.nav.openCoWebSite` |
 
 Não há verbo de partícula, sprite ou NPC: a API do WorkAdventure não tem nenhum dos três.

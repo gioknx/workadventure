@@ -1,19 +1,13 @@
 /**
- * Porta da Diretoria — a decisão visual consulta o mesmo cadastro que a
- * Admin API usa para bloquear o mapa fechado no servidor.
+ * Porta da Diretoria — a Diretoria e uma area DENTRO do HQ, nao outra sala.
+ * Quem decide e o servidor (tag + modo); o cliente so barra e avisa.
  */
 
 const ADMIN_API = "http://localhost:8901";
-const SALA_DIRETORIA = "diretoria-fechada.tmj#from-hq";
+// Tile (26,11): o corredor logo abaixo da porta, ja fora da Diretoria.
 const VOLTA = { x: 26.5 * 32, y: 11.5 * 32 };
 
-async function consultar(caminho) {
-  const resposta = await fetch(`${ADMIN_API}${caminho}`);
-  if (!resposta.ok) throw new Error(`API respondeu ${resposta.status}`);
-  return await resposta.json();
-}
-
-function avisar(id, text, bgColor, timeToClose = 4000) {
+function avisar(id, text, bgColor, timeToClose = 5000) {
   WA.ui.banner.openBanner({
     id,
     text,
@@ -24,40 +18,44 @@ function avisar(id, text, bgColor, timeToClose = 4000) {
   });
 }
 
+async function consultarAcesso(nome) {
+  const resposta = await fetch(
+    `${ADMIN_API}/api/diretoria/acesso?nome=${encodeURIComponent(nome)}`,
+  );
+  if (resposta.status === 200) return { acesso: true };
+  if (resposta.status === 403) {
+    const corpo = await resposta.json().catch(() => ({}));
+    return { acesso: false, motivo: corpo.motivo ?? "sem autorizacao" };
+  }
+  throw new Error(`API respondeu ${resposta.status}`);
+}
+
 WA.onInit().then(() => {
   let verificando = false;
-  let navegando = false;
+
+  const barrar = async (texto, id) => {
+    avisar(id, texto, "#8f2b2b", 5000);
+    await WA.player.teleport(VOLTA.x, VOLTA.y);
+  };
 
   const verificarEntrada = async () => {
-    if (verificando || navegando) return;
+    if (verificando) return;
     verificando = true;
     try {
-      const { modo } = await consultar("/diretoria/modo");
-      if (modo === "aberta") {
-        navegando = true;
-        await WA.nav.goToRoom(SALA_DIRETORIA);
-        return;
-      }
-
       const nome = String(WA.player.name || "").trim();
-      let pessoa = null;
-      try {
-        pessoa = await consultar(`/pessoas/${encodeURIComponent(nome)}`);
-      } catch (erro) {
-        if (!erro.message.includes("404")) throw erro;
-      }
-      if (Array.isArray(pessoa?.tags) && pessoa.tags.includes("diretoria")) {
-        navegando = true;
-        await WA.nav.goToRoom(SALA_DIRETORIA);
+      const veredito = await consultarAcesso(nome);
+      if (veredito.acesso) {
+        console.log(`[porta] acesso liberado para ${nome}`);
         return;
       }
-
-      avisar("porta-trancada", "Diretoria fechada — sua identidade não tem autorização.", "#8f2b2b", 5000);
-      await WA.player.teleport(VOLTA.x, VOLTA.y);
+      console.log(`[porta] acesso NEGADO para ${nome}: ${veredito.motivo}`);
+      await barrar("Diretoria — acesso restrito. Fale com o Mind.", "porta-trancada");
     } catch (erro) {
-      avisar("porta-indisponivel", "Diretoria indisponível — não foi possível confirmar sua autorização.", "#8f2b2b", 5000);
-      await WA.player.teleport(VOLTA.x, VOLTA.y);
-      console.error("[porta] falha ao consultar autorização:", erro);
+      console.error("[porta] falha ao consultar autorizacao:", erro);
+      await barrar(
+        "Diretoria — acesso restrito. Fale com o Mind.",
+        "porta-indisponivel",
+      );
     } finally {
       verificando = false;
     }
@@ -66,5 +64,5 @@ WA.onInit().then(() => {
   WA.room.area.onEnter("PortaDiretoria").subscribe(verificarEntrada);
   WA.room.area.onEnter("Diretoria").subscribe(verificarEntrada);
 
-  console.log("[porta] Diretoria fechada; autorização canônica ativa.");
+  console.log("[porta] barreira da Diretoria ativa (decisao no servidor).");
 });

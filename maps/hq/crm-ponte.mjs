@@ -10,11 +10,19 @@
  */
 
 import { createServer } from "node:http";
+import { createHmac } from "node:crypto";
 
 const PONTE_EVENTOS_URL = process.env.PONTE_EVENTOS_URL || "http://localhost:8902/eventos";
 const HQ_PLAY_EVENT_URL = process.env.HQ_PLAY_EVENT_URL || "http://play.workadventure.test/global/event";
 const TOKEN_ADMIN = process.env.ADMIN_API_TOKEN || "123";
 const PORTA_SAUDE = Number(process.env.PONTE_SAUDE_PORT || 8903);
+
+// Elo do ledger: venda que atravessa a ponte tambem credita pontos no
+// admin-api, com o MESMO event_id da outbox — a idempotencia do CRM vira a
+// idempotencia do ledger. Sem URL ou sem segredo o elo fica desligado, e a
+// ponte volta a ser so injetora (e o que o teste ponta a ponta exercita).
+const HQ_ADMIN_VENDA_URL = process.env.HQ_ADMIN_VENDA_URL || "";
+const HQ_WEBHOOK_SECRET = process.env.HQ_WEBHOOK_SECRET || "";
 
 const JANELA_MS = 5 * 60 * 1000; // idade maxima do evento
 const VIDA_CHAVE_MS = 10 * 60 * 1000; // quanto tempo a chave fica na memoria
@@ -61,6 +69,9 @@ const metricas = {
   injetados: 0,
   descartados_duplicados: 0,
   descartados_atrasados: 0,
+  vendas_creditadas: 0,
+  vendas_duplicadas: 0,
+  vendas_falhas: 0,
 };
 
 const vistas = new Map(); // idempotencyKey -> instante em que entrou
@@ -138,6 +149,51 @@ async function injetar(pacote) {
   }
 }
 
+// Venda -> ledger do admin-api. O `event_id` e a MESMA chave de idempotencia da
+// outbox do CRM, entao reenvio da mesma venda cai no `duplicado` do admin-api e
+// o ledger nao ganha linha nova. Sem retry, pela mesma razao do `injetar`.
+async function creditarVenda(evento) {
+  if (!HQ_ADMIN_VENDA_URL || !HQ_WEBHOOK_SECRET) return;
+  if (evento.payload.stage !== "conversion") return;
+  if (typeof evento.payload.ownerLabel !== "string" || !evento.payload.ownerLabel.trim()) {
+    console.log(`[crm-ponte] venda sem ownerLabel, ledger nao creditado ${evento.idempotencyKey}`);
+    return;
+  }
+  const corpo = JSON.stringify({
+    event_id: evento.idempotencyKey,
+    order_id: evento.payload.dealId || evento.idempotencyKey,
+    ativador: evento.payload.ownerLabel,
+    timestamp: evento.occurredAt,
+  });
+  const assinatura =
+    "sha256=" + createHmac("sha256", HQ_WEBHOOK_SECRET).update(corpo).digest("hex");
+  try {
+    const resposta = await fetch(HQ_ADMIN_VENDA_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-assinatura": assinatura },
+      body: corpo,
+    });
+    const dados = await resposta.json().catch(() => ({}));
+    if (resposta.status === 201) {
+      metricas.vendas_creditadas += 1;
+      console.log(`[crm-ponte] ledger creditado ${evento.idempotencyKey} sino=${dados.sino}`);
+      return;
+    }
+    if (resposta.status === 200 && dados.status === "duplicado") {
+      metricas.vendas_duplicadas += 1;
+      console.log(`[crm-ponte] ledger duplicado ${evento.idempotencyKey}`);
+      return;
+    }
+    metricas.vendas_falhas += 1;
+    console.error(
+      `[crm-ponte] ledger recusou ${evento.idempotencyKey}: ${resposta.status} ${JSON.stringify(dados)}`,
+    );
+  } catch (erro) {
+    metricas.vendas_falhas += 1;
+    console.error(`[crm-ponte] falha ao creditar ${evento.idempotencyKey}: ${erro.message || erro}`);
+  }
+}
+
 async function processar(evento) {
   metricas.recebidos += 1;
 
@@ -163,6 +219,7 @@ async function processar(evento) {
   }
 
   await injetar(PARA_O_MUNDO(evento));
+  await creditarVenda(evento);
 }
 
 function blocoParaEvento(bloco) {

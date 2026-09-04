@@ -1,4 +1,18 @@
 {
-  "saldos": {},
-  "semanas": {}
+  "saldos": {
+    "pessoa:39fdce07-6f63-4e2d-9211-0ebba6830f38": 10,
+    "squad:zeca": 160,
+    "pessoa:20ecdcd1-9465-4130-93e8-5ad3e87414fd": 0,
+    "squad:th": 150
+  },
+  "semanas": {
+    "2026-W36": {
+      "saldos": {
+        "pessoa:39fdce07-6f63-4e2d-9211-0ebba6830f38": 10,
+        "squad:zeca": 160,
+        "pessoa:20ecdcd1-9465-4130-93e8-5ad3e87414fd": 0,
+        "squad:th": 150
+      }
+    }
+  }
 }

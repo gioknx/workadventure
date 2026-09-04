@@ -1,0 +1,22 @@
+[
+  {
+    "id": "bicho-gato",
+    "nome": "Gato do HQ",
+    "preco_pontos": 150,
+    "textura": "http://maps.workadventure.test/hq/companions/gato.png",
+    "behavior": "cat"
+  },
+  {
+    "id": "bicho-cachorro",
+    "nome": "Cachorro do HQ",
+    "preco_pontos": 150,
+    "textura": "http://maps.workadventure.test/hq/companions/cachorro.png",
+    "behavior": "dog"
+  },
+  {
+    "id": "bicho-dragao",
+    "nome": "Dragao de bolso",
+    "preco_pontos": 600,
+    "textura": "http://maps.workadventure.test/hq/companions/dragao.png"
+  }
+]

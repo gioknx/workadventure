@@ -31,6 +31,7 @@ async function montar(catalogo) {
     mensagem: [],
     chat: [],
     outline: [],
+    camadas: [],
     variaveis: {},
     assinados: [],
     logs: [],
@@ -66,8 +67,12 @@ async function montar(catalogo) {
       },
     },
     room: {
-      showLayer: () => {},
-      hideLayer: () => {},
+      showLayer: (n) => {
+        registro.camadas.push(["show", n]);
+      },
+      hideLayer: (n) => {
+        registro.camadas.push(["hide", n]);
+      },
       setTiles: () => {},
       setProperty: () => {},
     },
@@ -135,7 +140,7 @@ async function montar(catalogo) {
   };
 }
 
-test("venda: 1 som, 1 banner interpolado e contador incrementado", async () => {
+test("venda: regra so conta, o sino vem do hq-venda (sino-global.js)", async () => {
   const m = await montar(CATALOGO_REAL);
   m.emitir("crm-matricula_view", {
     actorLabel: null,
@@ -149,25 +154,18 @@ test("venda: 1 som, 1 banner interpolado e contador incrementado", async () => {
   });
   await esperar(30);
 
-  assert.equal(m.registro.som.length, 1);
-  assert.equal(m.registro.som[0].url, "sons/sino.mp3");
-  assert.equal(m.registro.som[0].volume, 0.72);
-  assert.equal(m.registro.banner.length, 1);
-  assert.equal(m.registro.banner[0].text, "🔔 VENDA · Marina · Trilha Publi");
   assert.equal(m.registro.variaveis.hq_vendas_dia, 1);
+  assert.equal(m.registro.som.length, 0, "som da venda saiu duplicado no motor");
+  assert.equal(m.registro.banner.length, 0, "banner da venda saiu duplicado no motor");
 });
 
-test("vendedor ausente: ownerLabel null cai no padrao do catalogo", async () => {
+test("interpolacao com padrao: campo nulo cai no padrao do catalogo", async () => {
   const m = await montar(CATALOGO_REAL);
-  m.emitir("crm-matricula_view", {
-    ownerLabel: null,
-    productLabel: null,
-    stage: "conversion",
-  });
+  m.emitir("crm-onboarding_completed", { actorLabel: null });
   await esperar(30);
 
   assert.equal(m.registro.banner.length, 1);
-  assert.equal(m.registro.banner[0].text, "🔔 VENDA · equipe · matrícula");
+  assert.equal(m.registro.banner[0].text, "✅ onboarding concluído · Candidata");
 });
 
 test("silencio: segundo disparo em 100 ms e descartado", async () => {
@@ -177,7 +175,7 @@ test("silencio: segundo disparo em 100 ms e descartado", async () => {
   m.emitir("crm-matricula_view", { actorLabel: "Ana", stage: "conversion" });
   await esperar(30);
 
-  assert.equal(m.registro.som.length, 1, "tocou som dentro da janela de silencio");
+  assert.equal(m.registro.variaveis.hq_vendas_dia, 1, "contou dentro da janela de silencio");
   assert.equal(m.estado.descartes, 1);
   assert.ok(m.registro.logs.some((l) => l.includes("silencio venda-sino")));
 });
@@ -271,7 +269,7 @@ test("curinga: crm-* assina os 12 eventos do CRM", async () => {
   assert.deepEqual(m.registro.chat, ["Cris"]);
 });
 
-test("catalogo real: 12 regras, ids unicos, todo verbo existe", async () => {
+test("catalogo real: 14 regras, ids unicos, todo verbo existe", async () => {
   const ctxVerbos = createContext({
     console,
     setTimeout,
@@ -286,9 +284,9 @@ test("catalogo real: 12 regras, ids unicos, todo verbo existe", async () => {
   runInContext(FONTE_ACOES, ctxVerbos, { filename: "motor-acoes.js" });
   const verbos = Object.keys(runInContext("ACOES_MOTOR", ctxVerbos));
 
-  assert.equal(CATALOGO_REAL.regras.length, 12);
+  assert.equal(CATALOGO_REAL.regras.length, 14);
   const ids = CATALOGO_REAL.regras.map((r) => r.id);
-  assert.equal(new Set(ids).size, 12);
+  assert.equal(new Set(ids).size, 14);
   CATALOGO_REAL.regras.forEach((r) => {
     r.faz.forEach((a) => {
       assert.ok(verbos.includes(a.acao), `verbo ausente no registro: ${a.acao} (${r.id})`);
@@ -296,5 +294,61 @@ test("catalogo real: 12 regras, ids unicos, todo verbo existe", async () => {
   });
 
   const m = await montar(CATALOGO_REAL);
-  assert.equal(m.estado.regras.length, 12);
+  assert.equal(m.estado.regras.length, 14);
+});
+
+// ---------- incendio de leads: hq_fila_curadoria -> 4 faixas ----------
+
+/** Ultima camada mostrada, ou null quando a faixa nao acende nenhuma. */
+function camadaAcesa(registro) {
+  const shows = registro.camadas.filter(([acao]) => acao === "show");
+  return shows.length ? shows[shows.length - 1][1] : null;
+}
+
+const FAIXAS_ESPERADAS = [
+  { fila: 0, camada: null },
+  { fila: 5, camada: "fila-fumaca" },
+  { fila: 20, camada: "fila-fogo" },
+  { fila: 40, camada: "fila-incendio" },
+];
+
+for (const { fila, camada } of FAIXAS_ESPERADAS) {
+  test(`incendio: fila ${fila} acende ${camada || "nenhuma camada"}`, async () => {
+    const m = await montar(CATALOGO_REAL);
+    // Semeia fila-1 e deixa o proprio evento fechar a conta: o teto por minuto do
+    // motor (12/regra, 20 global) impede empurrar 40 eventos de verdade.
+    m.registro.variaveis.hq_fila_curadoria = fila - 1;
+    m.emitir("crm-pre_task_awaiting_review", { actorLabel: null });
+    await esperar(60);
+
+    assert.equal(m.registro.variaveis.hq_fila_curadoria, fila);
+    assert.equal(camadaAcesa(m.registro), camada);
+    const escondidas = m.registro.camadas
+      .filter(([acao]) => acao === "hide")
+      .map(([, nome]) => nome);
+    const todas = ["fila-fumaca", "fila-fogo", "fila-incendio"];
+    todas
+      .filter((n) => n !== camada)
+      .forEach((n) => assert.ok(escondidas.includes(n), `faltou esconder ${n}`));
+  });
+}
+
+test("incendio: job aprovado tira 1 da fila e desce a faixa", async () => {
+  const m = await montar(CATALOGO_REAL);
+  m.registro.variaveis.hq_fila_curadoria = 31;
+  m.emitir("crm-first_job_approved", { actorLabel: "Marina" });
+  await esperar(60);
+
+  assert.equal(m.registro.variaveis.hq_fila_curadoria, 30);
+  assert.equal(camadaAcesa(m.registro), "fila-fogo");
+});
+
+test("incendio: fila em 0 nao fica negativa quando um job e recusado", async () => {
+  const m = await montar(CATALOGO_REAL);
+  m.registro.variaveis.hq_fila_curadoria = 0;
+  m.emitir("crm-first_job_rejected", { actorLabel: "Marina" });
+  await esperar(60);
+
+  assert.equal(m.registro.variaveis.hq_fila_curadoria, 0);
+  assert.equal(camadaAcesa(m.registro), null);
 });

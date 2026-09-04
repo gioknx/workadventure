@@ -1,1 +1,16 @@
-{}
+{
+  "39fdce07-6f63-4e2d-9211-0ebba6830f38": [
+    {
+      "item_id": "bicho-gato",
+      "tipo": "companion",
+      "granted_from": "e6716ac8-5340-466f-ba17-f72b9dcf6c85"
+    }
+  ],
+  "20ecdcd1-9465-4130-93e8-5ad3e87414fd": [
+    {
+      "item_id": "bicho-gato",
+      "tipo": "companion",
+      "granted_from": "16058027-4a68-45c7-a79e-395f5b395db2"
+    }
+  ]
+}
