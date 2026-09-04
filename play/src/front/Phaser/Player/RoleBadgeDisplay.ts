@@ -11,18 +11,20 @@ const BADGE_FONT_SIZE = 5;
 const BADGE_FONT_WEIGHT = 500;
 const BADGE_LETTER_SPACING = 0.4;
 const BADGE_HEIGHT = 7;
-const BADGE_PADDING = 3;
-const BADGE_RADIUS = 3.5;
+const BADGE_PADDING = 0;
+const BADGE_RADIUS = 0;
 // Vertical space between the top of the name pill and the bottom of the badge, in game pixels.
-const BADGE_GAP = 1;
+const BADGE_GAP = 1.5;
 // Mirrors PLAYER_NAME_HEIGHT in UsernameDisplay: the name pill is centered on the anchor point, so
 // its top edge sits half a pill above it and the badge has to clear that before the gap applies.
 const NAME_PILL_HEIGHT = 14;
-// The very pill the name uses (PLAYER_NAME_BACKGROUND_COLOR), so the badge reads as one caption
-// stacked on the name rather than a second, louder object.
-const BADGE_PILL_BACKGROUND = "rgba(27, 42, 65, 0.5)";
-// Lighter halo than the name's: the ink is already a light tone on a dark pill.
-const BADGE_TEXT_SHADOW = "0 1px 1px rgba(0, 0, 0, 0.55)";
+// No pill at all: the role reads as bare ink above the name, so the only thing added to the Woka is
+// the word itself.
+const BADGE_PILL_BACKGROUND = "transparent";
+// Without a pill behind it the ink has to survive on its own, so the halo doubles as a thin outline
+// on light grass and on a white floor alike.
+const BADGE_TEXT_SHADOW =
+    "0 1px 2px rgba(0, 0, 0, 0.9), 0 0 2px rgba(0, 0, 0, 0.9), 0 0 3px rgba(0, 0, 0, 0.55)";
 
 /**
  * The role badge drawn right under the Woka name.
